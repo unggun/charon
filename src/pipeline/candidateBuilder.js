@@ -52,6 +52,18 @@ export function filterCandidate(candidate) {
     failures.push('fee claim: missing (required by strategy)');
   }
 
+  // Fee density (SOL/hr) — only enforce when both fee_claim and tokenAgeMs are available
+  if (strat.min_fee_density_sol_per_hour > 0 && candidate.feeClaim) {
+    const tokenAgeMs = candidate.metrics.tokenAgeMs;
+    if (Number.isFinite(tokenAgeMs) && tokenAgeMs > 0) {
+      const ageHours = Math.max(tokenAgeMs / 3600000, 0.1);
+      const density = (feeSol || 0) / ageHours;
+      if (density < strat.min_fee_density_sol_per_hour) {
+        failures.push(`fee density: ${density.toFixed(2)} SOL/hr < ${strat.min_fee_density_sol_per_hour}`);
+      }
+    }
+  }
+
   // Market cap checks
   if (strat.min_mcap_usd > 0 && (!Number.isFinite(mcap) || mcap < strat.min_mcap_usd)) {
     failures.push(`market cap min: ${mcap} < ${strat.min_mcap_usd}`);
