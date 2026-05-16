@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node index.js",
     "check": "node --check index.js && node --check src/app.js && node --check src/config.js && node --check src/liveExecutor.js",
-    "test": "node --test tests/scoring/ tests/pipeline/"
+    "test": "node --test --test-reporter=spec 'tests/**/*.test.js'"
   },
   "dependencies": {
     "@solana/web3.js": "^1.98.4",
