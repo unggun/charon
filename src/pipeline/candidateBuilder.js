@@ -29,8 +29,8 @@ export function signalLabel(signals = {}) {
   ].filter(Boolean).join(' + ') || signals.route || 'unknown';
 }
 
-export function filterCandidate(candidate) {
-  const strat = activeStrategy();
+export function filterCandidate(candidate, strat = null) {
+  if (strat === null) strat = activeStrategy();
   const failures = [];
   const mcap = candidate.metrics.marketCapUsd;
   const totalFees = candidate.metrics.gmgnTotalFeesSol;
