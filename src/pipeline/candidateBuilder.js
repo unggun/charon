@@ -1,6 +1,7 @@
 import { now, firstPositiveNumber, marketCapFromGmgn, tokenPriceFromGmgn, lamToSol } from '../utils.js';
 import { activeStrategy } from '../db/settings.js';
 import { pickStageGate } from './stageGate.js';
+import { computeTrenchScore } from '../scoring/trenchScore.js';
 import { fetchGmgnTokenInfo } from '../enrichment/gmgn.js';
 import { fetchJupiterAsset, fetchJupiterHolders, fetchJupiterChartContext } from '../enrichment/jupiter.js';
 import { fetchSavedWalletExposure } from '../enrichment/wallets.js';
@@ -129,6 +130,14 @@ export function filterCandidate(candidate) {
     }
   }
 
+  // Trench score gate — composite floor across multiple signals
+  if (strat.min_trench_score > 0) {
+    const { total } = computeTrenchScore(candidate);
+    if (total < strat.min_trench_score) {
+      failures.push(`trench score: ${total.toFixed(1)} < ${strat.min_trench_score}`);
+    }
+  }
+
   return { passed: failures.length === 0, failures, strategy: strat.id };
 }
 
@@ -207,6 +216,7 @@ export async function buildCandidate({ mint, fee = null, signature = null, gradu
     twitterNarrative,
     createdAtMs: now(),
   };
+  candidate.trenchScore = computeTrenchScore(candidate);
   candidate.filters = filterCandidate(candidate);
   return candidate;
 }
