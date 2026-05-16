@@ -25,9 +25,9 @@ function signalKey(signal) {
   return `${signal.mint}:${sources}`;
 }
 
-async function triggerCandidate({ mint, fee, signature, graduatedCoin, trendingToken, route }) {
+async function triggerCandidate({ mint, fee, signature, graduatedCoin, trendingToken, route, ageMs, sourceCount }) {
   if (!candidateHandler) return;
-  await candidateHandler({ mint, fee, signature, graduatedCoin, trendingToken, route });
+  await candidateHandler({ mint, fee, signature, graduatedCoin, trendingToken, route, ageMs, sourceCount });
 }
 
 export async function fetchServerSignals() {
@@ -145,7 +145,7 @@ export async function fetchServerSignals() {
         const athDist = signal.graduated?.distanceFromAthPercent;
         if (athDist != null && athDist <= strat.max_ath_distance_pct) {
           // Already at dip target, trigger immediately
-          await triggerCandidate({ mint, fee, signature, graduatedCoin, trendingToken, route });
+          await triggerCandidate({ mint, fee, signature, graduatedCoin, trendingToken, route, ageMs: signal.ageMs ?? null, sourceCount });
           triggered++;
         } else {
           // Store price alert for later
@@ -164,7 +164,7 @@ export async function fetchServerSignals() {
         }
       } else {
         // Immediate entry mode (sniper, smart_money, degen)
-        await triggerCandidate({ mint, fee, signature, graduatedCoin, trendingToken, route });
+        await triggerCandidate({ mint, fee, signature, graduatedCoin, trendingToken, route, ageMs: signal.ageMs ?? null, sourceCount });
         triggered++;
       }
 

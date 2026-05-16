@@ -115,7 +115,7 @@ export function filterCandidate(candidate) {
   return { passed: failures.length === 0, failures, strategy: strat.id };
 }
 
-export async function buildCandidate({ mint, fee = null, signature = null, graduatedCoin = null, trendingToken = null, route }) {
+export async function buildCandidate({ mint, fee = null, signature = null, graduatedCoin = null, trendingToken = null, route, ageMs = null, sourceCount = null }) {
   const strat = activeStrategy();
   const gmgn = await fetchGmgnTokenInfo(mint);
   const jupiterAsset = await fetchJupiterAsset(mint);
@@ -161,6 +161,7 @@ export async function buildCandidate({ mint, fee = null, signature = null, gradu
       trendingSwaps: Number(trendingToken?.swaps ?? 0),
       trendingHotLevel: Number(trendingToken?.hot_level ?? 0),
       trendingSmartDegenCount: Number(trendingToken?.smart_degen_count ?? 0),
+      tokenAgeMs: ageMs ?? null,
     },
     signals: {
       route: signalRoute,
@@ -174,6 +175,9 @@ export async function buildCandidate({ mint, fee = null, signature = null, gradu
       hasTrending: Boolean(trendingToken),
       triggerSignature: signature,
       strategy: strat.id,
+      sourceCount: sourceCount ?? (
+        (Boolean(fee) ? 1 : 0) + (Boolean(graduatedCoin) ? 1 : 0) + (Boolean(trendingToken) ? 1 : 0)
+      ),
     },
     graduation: graduatedCoin,
     trending: trendingToken,
