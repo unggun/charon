@@ -90,6 +90,15 @@ export const strategyNumericLabels = {
   partial_tp_at_percent: 'partial TP trigger percent',
   partial_tp_sell_percent: 'partial TP sell percent',
   max_hold_ms: 'maximum hold milliseconds',
+  min_fee_density_sol_per_hour: 'minimum fee density (SOL per hour)',
+  min_trench_score: 'minimum trench score (0-100)',
+  early_stage_mcap_threshold_usd: 'mcap threshold below which a candidate is "early" (USD)',
+  early_llm_min_confidence: 'early-stage LLM minimum confidence percent (null = use main)',
+  early_min_fee_claim_sol: 'early-stage minimum creator fee-claim SOL (null = use main)',
+  early_min_gmgn_total_fee_sol: 'early-stage minimum total trading fees SOL (null = use main)',
+  early_max_ath_distance_pct: 'early-stage maximum ATH distance percent (null = use main)',
+  early_min_holders: 'early-stage minimum holders (null = use main)',
+  early_max_top20_holder_percent: 'early-stage maximum top holder percent (null = use main)',
 };
 
 export function filtersKeyboard() {
@@ -209,6 +218,8 @@ export function strategyMenuText() {
     strat.max_ath_distance_pct < 0 ? `Max ATH distance: ${strat.max_ath_distance_pct}%` : null,
     strat.partial_tp ? `Partial TP: ${strat.partial_tp_sell_percent}% at ${fmtPct(strat.partial_tp_at_percent)}` : null,
     strat.max_hold_ms > 0 ? `Max hold: ${Math.round(strat.max_hold_ms / 60000)}m` : null,
+    strat.min_trench_score > 0 ? `Min trench score: ${strat.min_trench_score}` : null,
+    strat.min_fee_density_sol_per_hour > 0 ? `Min fee density: ${strat.min_fee_density_sol_per_hour} SOL/hr` : null,
     strat.use_llm ? `LLM: yes (min ${strat.llm_min_confidence}%)` : 'LLM: no (rule-based)',
     '',
     ...all.map(s => `${s.enabled ? '▶' : '○'} ${s.name}`),
@@ -277,6 +288,22 @@ export function strategyKeyboard() {
     ],
     [
       { text: `Partial At ${strat.partial_tp_at_percent}%`, callback_data: 'stratinput:partial_tp_at_percent' },
+    ],
+    [
+      { text: `Fee Density ${strat.min_fee_density_sol_per_hour > 0 ? strat.min_fee_density_sol_per_hour : 'off'}`, callback_data: 'stratinput:min_fee_density_sol_per_hour' },
+      { text: `Trench Score ${strat.min_trench_score > 0 ? strat.min_trench_score : 'off'}`, callback_data: 'stratinput:min_trench_score' },
+    ],
+    [
+      { text: `Early Mcap ${strat.early_stage_mcap_threshold_usd ? fmtUsd(strat.early_stage_mcap_threshold_usd) : 'off'}`, callback_data: 'stratinput:early_stage_mcap_threshold_usd' },
+      { text: `Early Conf ${strat.early_llm_min_confidence ?? 'main'}`, callback_data: 'stratinput:early_llm_min_confidence' },
+    ],
+    [
+      { text: `Early Fee ${strat.early_min_fee_claim_sol ?? 'main'}`, callback_data: 'stratinput:early_min_fee_claim_sol' },
+      { text: `Early Holders ${strat.early_min_holders ?? 'main'}`, callback_data: 'stratinput:early_min_holders' },
+    ],
+    [
+      { text: `Early Top% ${strat.early_max_top20_holder_percent ?? 'main'}`, callback_data: 'stratinput:early_max_top20_holder_percent' },
+      { text: `Early ATH ${strat.early_max_ath_distance_pct ?? 'main'}`, callback_data: 'stratinput:early_max_ath_distance_pct' },
     ],
   ];
   return {
