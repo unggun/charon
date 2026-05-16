@@ -87,5 +87,14 @@ function defaultStrategy() {
     tp_percent: 50, sl_percent: -25, trailing_enabled: true, trailing_percent: 20,
     partial_tp: false, partial_tp_at_percent: 0, partial_tp_sell_percent: 0,
     max_hold_ms: 0, use_llm: true, llm_min_confidence: 50,
+    min_fee_density_sol_per_hour: 0,
+    early_stage_mcap_threshold_usd: 30000,
+    early_llm_min_confidence: null,
+    early_min_fee_claim_sol: null,
+    early_min_gmgn_total_fee_sol: null,
+    early_max_ath_distance_pct: null,
+    early_min_holders: null,
+    early_max_top20_holder_percent: null,
+    min_trench_score: 0,
   };
 }

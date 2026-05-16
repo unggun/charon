@@ -1,5 +1,7 @@
 import { now, firstPositiveNumber, marketCapFromGmgn, tokenPriceFromGmgn, lamToSol } from '../utils.js';
 import { activeStrategy } from '../db/settings.js';
+import { pickStageGate } from './stageGate.js';
+import { computeTrenchScore } from '../scoring/trenchScore.js';
 import { fetchGmgnTokenInfo } from '../enrichment/gmgn.js';
 import { fetchJupiterAsset, fetchJupiterHolders, fetchJupiterChartContext } from '../enrichment/jupiter.js';
 import { fetchSavedWalletExposure } from '../enrichment/wallets.js';
@@ -27,8 +29,8 @@ export function signalLabel(signals = {}) {
   ].filter(Boolean).join(' + ') || signals.route || 'unknown';
 }
 
-export function filterCandidate(candidate) {
-  const strat = activeStrategy();
+export function filterCandidate(candidate, strat = null) {
+  if (strat === null) strat = activeStrategy();
   const failures = [];
   const mcap = candidate.metrics.marketCapUsd;
   const totalFees = candidate.metrics.gmgnTotalFeesSol;
@@ -44,12 +46,24 @@ export function filterCandidate(candidate) {
 
   // Fee claim check
   if (candidate.feeClaim) {
-    const minFee = strat.min_fee_claim_sol ?? 0.5;
+    const minFee = pickStageGate(strat, candidate, 'min_fee_claim_sol') ?? 0.5;
     if (minFee > 0 && feeSol < minFee) {
       failures.push(`fee claim: ${feeSol} SOL < min ${minFee} SOL`);
     }
   } else if (strat.require_fee_claim) {
     failures.push('fee claim: missing (required by strategy)');
+  }
+
+  // Fee density (SOL/hr) — only enforce when both fee_claim and tokenAgeMs are available
+  if (strat.min_fee_density_sol_per_hour > 0 && candidate.feeClaim) {
+    const tokenAgeMs = candidate.metrics.tokenAgeMs;
+    if (Number.isFinite(tokenAgeMs) && tokenAgeMs > 0) {
+      const ageHours = Math.max(tokenAgeMs / 3600000, 0.1);
+      const density = (feeSol || 0) / ageHours;
+      if (density < strat.min_fee_density_sol_per_hour) {
+        failures.push(`fee density: ${density.toFixed(2)} SOL/hr < ${strat.min_fee_density_sol_per_hour}`);
+      }
+    }
   }
 
   // Market cap checks
@@ -61,8 +75,9 @@ export function filterCandidate(candidate) {
   }
 
   // GMGN fees — only enforce when GMGN data is available; Jupiter has no equivalent
-  if (strat.min_gmgn_total_fee_sol > 0 && candidate.gmgn !== null && totalFees < strat.min_gmgn_total_fee_sol) {
-    failures.push(`GMGN total fees: ${totalFees} < ${strat.min_gmgn_total_fee_sol}`);
+  const minGmgnFees = pickStageGate(strat, candidate, 'min_gmgn_total_fee_sol');
+  if (minGmgnFees > 0 && candidate.gmgn !== null && totalFees < minGmgnFees) {
+    failures.push(`GMGN total fees: ${totalFees} < ${minGmgnFees}`);
   }
 
   // Graduated volume — only enforce when the token actually has graduated data
@@ -71,13 +86,15 @@ export function filterCandidate(candidate) {
   }
 
   // Holder count
-  if (strat.min_holders > 0 && holderCount < strat.min_holders) {
-    failures.push(`holders: ${holderCount} < ${strat.min_holders}`);
+  const minHolders = pickStageGate(strat, candidate, 'min_holders');
+  if (minHolders > 0 && holderCount < minHolders) {
+    failures.push(`holders: ${holderCount} < ${minHolders}`);
   }
 
   // Top holder concentration
-  if (strat.max_top20_holder_percent < 100 && Number.isFinite(maxHolder) && maxHolder > strat.max_top20_holder_percent) {
-    failures.push(`max top holder: ${maxHolder}% > ${strat.max_top20_holder_percent}%`);
+  const maxTop20 = pickStageGate(strat, candidate, 'max_top20_holder_percent');
+  if (maxTop20 < 100 && Number.isFinite(maxHolder) && maxHolder > maxTop20) {
+    failures.push(`max top holder: ${maxHolder}% > ${maxTop20}%`);
   }
 
   // Saved wallet holders
@@ -86,10 +103,11 @@ export function filterCandidate(candidate) {
   }
 
   // ATH distance (dip buy strategy)
-  if (strat.max_ath_distance_pct < 0) {
+  const maxAthDist = pickStageGate(strat, candidate, 'max_ath_distance_pct');
+  if (maxAthDist < 0) {
     const athDist = candidate.chart?.distanceFromAthPercent;
-    if (athDist != null && athDist > strat.max_ath_distance_pct) {
-      failures.push(`ATH distance: ${athDist.toFixed(0)}% > target ${strat.max_ath_distance_pct}%`);
+    if (athDist != null && athDist > maxAthDist) {
+      failures.push(`ATH distance: ${athDist.toFixed(0)}% > target ${maxAthDist}%`);
     }
   }
 
@@ -112,10 +130,18 @@ export function filterCandidate(candidate) {
     }
   }
 
+  // Trench score gate — composite floor across multiple signals
+  if (strat.min_trench_score > 0) {
+    const { total } = computeTrenchScore(candidate);
+    if (total < strat.min_trench_score) {
+      failures.push(`trench score: ${total.toFixed(1)} < ${strat.min_trench_score}`);
+    }
+  }
+
   return { passed: failures.length === 0, failures, strategy: strat.id };
 }
 
-export async function buildCandidate({ mint, fee = null, signature = null, graduatedCoin = null, trendingToken = null, route }) {
+export async function buildCandidate({ mint, fee = null, signature = null, graduatedCoin = null, trendingToken = null, route, ageMs = null, sourceCount = null }) {
   const strat = activeStrategy();
   const gmgn = await fetchGmgnTokenInfo(mint);
   const jupiterAsset = await fetchJupiterAsset(mint);
@@ -161,6 +187,7 @@ export async function buildCandidate({ mint, fee = null, signature = null, gradu
       trendingSwaps: Number(trendingToken?.swaps ?? 0),
       trendingHotLevel: Number(trendingToken?.hot_level ?? 0),
       trendingSmartDegenCount: Number(trendingToken?.smart_degen_count ?? 0),
+      tokenAgeMs: ageMs ?? null,
     },
     signals: {
       route: signalRoute,
@@ -174,6 +201,9 @@ export async function buildCandidate({ mint, fee = null, signature = null, gradu
       hasTrending: Boolean(trendingToken),
       triggerSignature: signature,
       strategy: strat.id,
+      sourceCount: sourceCount ?? (
+        (Boolean(fee) ? 1 : 0) + (Boolean(graduatedCoin) ? 1 : 0) + (Boolean(trendingToken) ? 1 : 0)
+      ),
     },
     graduation: graduatedCoin,
     trending: trendingToken,
@@ -186,6 +216,7 @@ export async function buildCandidate({ mint, fee = null, signature = null, gradu
     twitterNarrative,
     createdAtMs: now(),
   };
+  candidate.trenchScore = computeTrenchScore(candidate);
   candidate.filters = filterCandidate(candidate);
   return candidate;
 }
