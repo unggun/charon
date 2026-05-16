@@ -1,5 +1,6 @@
 import { now, firstPositiveNumber, marketCapFromGmgn, tokenPriceFromGmgn, lamToSol } from '../utils.js';
 import { activeStrategy } from '../db/settings.js';
+import { pickStageGate } from './stageGate.js';
 import { fetchGmgnTokenInfo } from '../enrichment/gmgn.js';
 import { fetchJupiterAsset, fetchJupiterHolders, fetchJupiterChartContext } from '../enrichment/jupiter.js';
 import { fetchSavedWalletExposure } from '../enrichment/wallets.js';
@@ -44,7 +45,7 @@ export function filterCandidate(candidate) {
 
   // Fee claim check
   if (candidate.feeClaim) {
-    const minFee = strat.min_fee_claim_sol ?? 0.5;
+    const minFee = pickStageGate(strat, candidate, 'min_fee_claim_sol') ?? 0.5;
     if (minFee > 0 && feeSol < minFee) {
       failures.push(`fee claim: ${feeSol} SOL < min ${minFee} SOL`);
     }
@@ -73,8 +74,9 @@ export function filterCandidate(candidate) {
   }
 
   // GMGN fees — only enforce when GMGN data is available; Jupiter has no equivalent
-  if (strat.min_gmgn_total_fee_sol > 0 && candidate.gmgn !== null && totalFees < strat.min_gmgn_total_fee_sol) {
-    failures.push(`GMGN total fees: ${totalFees} < ${strat.min_gmgn_total_fee_sol}`);
+  const minGmgnFees = pickStageGate(strat, candidate, 'min_gmgn_total_fee_sol');
+  if (minGmgnFees > 0 && candidate.gmgn !== null && totalFees < minGmgnFees) {
+    failures.push(`GMGN total fees: ${totalFees} < ${minGmgnFees}`);
   }
 
   // Graduated volume — only enforce when the token actually has graduated data
@@ -83,13 +85,15 @@ export function filterCandidate(candidate) {
   }
 
   // Holder count
-  if (strat.min_holders > 0 && holderCount < strat.min_holders) {
-    failures.push(`holders: ${holderCount} < ${strat.min_holders}`);
+  const minHolders = pickStageGate(strat, candidate, 'min_holders');
+  if (minHolders > 0 && holderCount < minHolders) {
+    failures.push(`holders: ${holderCount} < ${minHolders}`);
   }
 
   // Top holder concentration
-  if (strat.max_top20_holder_percent < 100 && Number.isFinite(maxHolder) && maxHolder > strat.max_top20_holder_percent) {
-    failures.push(`max top holder: ${maxHolder}% > ${strat.max_top20_holder_percent}%`);
+  const maxTop20 = pickStageGate(strat, candidate, 'max_top20_holder_percent');
+  if (maxTop20 < 100 && Number.isFinite(maxHolder) && maxHolder > maxTop20) {
+    failures.push(`max top holder: ${maxHolder}% > ${maxTop20}%`);
   }
 
   // Saved wallet holders
@@ -98,10 +102,11 @@ export function filterCandidate(candidate) {
   }
 
   // ATH distance (dip buy strategy)
-  if (strat.max_ath_distance_pct < 0) {
+  const maxAthDist = pickStageGate(strat, candidate, 'max_ath_distance_pct');
+  if (maxAthDist < 0) {
     const athDist = candidate.chart?.distanceFromAthPercent;
-    if (athDist != null && athDist > strat.max_ath_distance_pct) {
-      failures.push(`ATH distance: ${athDist.toFixed(0)}% > target ${strat.max_ath_distance_pct}%`);
+    if (athDist != null && athDist > maxAthDist) {
+      failures.push(`ATH distance: ${athDist.toFixed(0)}% > target ${maxAthDist}%`);
     }
   }
 
