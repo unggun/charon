@@ -278,6 +278,15 @@ export function initDb() {
     max_hold_ms: 0,
     use_llm: true,
     llm_min_confidence: 50,
+    min_fee_density_sol_per_hour: 0,
+    early_stage_mcap_threshold_usd: 30000,
+    early_llm_min_confidence: null,
+    early_min_fee_claim_sol: null,
+    early_min_gmgn_total_fee_sol: null,
+    early_max_ath_distance_pct: null,
+    early_min_holders: null,
+    early_max_top20_holder_percent: null,
+    min_trench_score: 0,
   }), ts);
 
   stratInsert.run('dip_buy', 'Dip Buy', 0, JSON.stringify({
@@ -310,6 +319,15 @@ export function initDb() {
     max_hold_ms: 0,
     use_llm: true,
     llm_min_confidence: 60,
+    min_fee_density_sol_per_hour: 0,
+    early_stage_mcap_threshold_usd: 30000,
+    early_llm_min_confidence: null,
+    early_min_fee_claim_sol: null,
+    early_min_gmgn_total_fee_sol: null,
+    early_max_ath_distance_pct: null,
+    early_min_holders: null,
+    early_max_top20_holder_percent: null,
+    min_trench_score: 0,
   }), ts);
 
   stratInsert.run('smart_money', 'Smart Money', 0, JSON.stringify({
@@ -342,6 +360,15 @@ export function initDb() {
     max_hold_ms: 0,
     use_llm: true,
     llm_min_confidence: 70,
+    min_fee_density_sol_per_hour: 0,
+    early_stage_mcap_threshold_usd: 30000,
+    early_llm_min_confidence: null,
+    early_min_fee_claim_sol: null,
+    early_min_gmgn_total_fee_sol: null,
+    early_max_ath_distance_pct: null,
+    early_min_holders: null,
+    early_max_top20_holder_percent: null,
+    min_trench_score: 0,
   }), ts);
 
   stratInsert.run('degen', 'Degen', 0, JSON.stringify({
@@ -374,6 +401,15 @@ export function initDb() {
     max_hold_ms: 0,
     use_llm: false,
     llm_min_confidence: 0,
+    min_fee_density_sol_per_hour: 0,
+    early_stage_mcap_threshold_usd: 30000,
+    early_llm_min_confidence: null,
+    early_min_fee_claim_sol: null,
+    early_min_gmgn_total_fee_sol: null,
+    early_max_ath_distance_pct: null,
+    early_min_holders: null,
+    early_max_top20_holder_percent: null,
+    min_trench_score: 0,
   }), ts);
 }
 
