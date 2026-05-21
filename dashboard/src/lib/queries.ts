@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import type { Filters, PositionRow } from "./types";
+import type { Filters, PositionRow, TradeRow, LlmDecisionRow } from "./types";
 
 interface WhereBuild {
   clauses: string[];
@@ -185,4 +185,71 @@ export function monthDailyPnl(
 function lastDayOfMonth(year: number, month: number): string {
   const date = new Date(Date.UTC(year, month, 0));
   return `${year}-${String(month).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+}
+
+export interface OrderDetail {
+  position: PositionRow;
+  trades: TradeRow[];
+  decision: LlmDecisionRow | null;
+}
+
+export function getOrderDetail(db: Database.Database, id: number): OrderDetail | null {
+  const position = db
+    .prepare("SELECT * FROM dry_run_positions WHERE id = ?")
+    .get(id) as PositionRow | undefined;
+  if (!position) return null;
+
+  const trades = db
+    .prepare("SELECT * FROM dry_run_trades WHERE position_id = ? ORDER BY at_ms ASC")
+    .all(id) as TradeRow[];
+
+  const decision = position.llm_decision_id
+    ? (db
+        .prepare("SELECT * FROM llm_decisions WHERE id = ?")
+        .get(position.llm_decision_id) as LlmDecisionRow | undefined) ?? null
+    : null;
+
+  return { position, trades, decision };
+}
+
+export function listOpenPositions(db: Database.Database): PositionRow[] {
+  return db
+    .prepare("SELECT * FROM dry_run_positions WHERE status = 'open' ORDER BY opened_at_ms DESC")
+    .all() as PositionRow[];
+}
+
+export function recentClosedPositions(
+  db: Database.Database,
+  f: Filters,
+  n: number,
+): PositionRow[] {
+  return listOrders(db, f, { page: 1, pageSize: n, sort: "closed_at_ms", dir: "desc" });
+}
+
+export function listStrategies(db: Database.Database): string[] {
+  const rows = db
+    .prepare("SELECT DISTINCT strategy_id FROM dry_run_positions WHERE strategy_id IS NOT NULL")
+    .all() as { strategy_id: string }[];
+  return rows.map((r) => r.strategy_id);
+}
+
+export interface CumulativePnlPoint {
+  closed_at_ms: number;
+  cumulative: number;
+}
+
+export function cumulativePnlSeries(db: Database.Database, f: Filters): CumulativePnlPoint[] {
+  const { clauses, params } = whereWithLimit(db, f);
+  const rows = db
+    .prepare(
+      `SELECT closed_at_ms, pnl_sol FROM dry_run_positions
+       WHERE ${clauses.join(" AND ")} ORDER BY closed_at_ms ASC`
+    )
+    .all(...params) as { closed_at_ms: number; pnl_sol: number }[];
+
+  let running = 0;
+  return rows.map((r) => {
+    running += r.pnl_sol;
+    return { closed_at_ms: r.closed_at_ms, cumulative: running };
+  });
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type Database from "better-sqlite3";
 import { freshDb, seedPosition } from "./fixtures";
-import { overviewMetrics, listOrders, countOrders, dailyPnl, monthDailyPnl } from "../src/lib/queries";
+import { overviewMetrics, listOrders, countOrders, dailyPnl, monthDailyPnl, getOrderDetail, listOpenPositions, recentClosedPositions, listStrategies, cumulativePnlSeries } from "../src/lib/queries";
 
 let db: Database.Database;
 
@@ -146,5 +146,66 @@ describe("monthDailyPnl", () => {
     const rows = monthDailyPnl(db, {}, 2026, 5);
     expect(rows).toHaveLength(1);
     expect(rows[0].day).toBe("2026-05-15");
+  });
+});
+
+describe("getOrderDetail", () => {
+  it("returns position with trades, null decision when none", () => {
+    const id = seedPosition(db, { opened: "2026-05-10", closed: "2026-05-10", pnl_sol: 0.1 });
+    db.prepare(
+      `INSERT INTO dry_run_trades (position_id, mint, side, at_ms, price, mcap, size_sol, reason, payload_json)
+       VALUES (?, 'MintX', 'buy', ?, 0.0001, 50000, 0.1, 'llm_buy', '{}')`
+    ).run(id, Date.parse("2026-05-10T12:00:00Z"));
+
+    const detail = getOrderDetail(db, id);
+    expect(detail).not.toBeNull();
+    expect(detail!.position.id).toBe(id);
+    expect(detail!.trades).toHaveLength(1);
+    expect(detail!.decision).toBeNull();
+  });
+
+  it("returns null for unknown id", () => {
+    expect(getOrderDetail(db, 9999)).toBeNull();
+  });
+});
+
+describe("listOpenPositions", () => {
+  it("returns only status=open rows", () => {
+    seedPosition(db, { opened: "2026-05-10", closed: "2026-05-10", pnl_sol: 0.1 });
+    seedPosition(db, { opened: "2026-05-11", status: "open" });
+    const rows = listOpenPositions(db);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe("open");
+  });
+});
+
+describe("recentClosedPositions", () => {
+  it("returns N most recent closes", () => {
+    for (let d = 1; d <= 7; d++) {
+      seedPosition(db, { opened: `2026-05-0${d}`, closed: `2026-05-0${d}`, pnl_sol: d * 0.1 });
+    }
+    const rows = recentClosedPositions(db, {}, 5);
+    expect(rows).toHaveLength(5);
+    expect(rows[0].pnl_sol).toBeCloseTo(0.7, 6);
+  });
+});
+
+describe("listStrategies", () => {
+  it("returns distinct strategy ids used", () => {
+    seedPosition(db, { opened: "2026-05-01", closed: "2026-05-01", pnl_sol: 0.1, strategy: "sniper" });
+    seedPosition(db, { opened: "2026-05-02", closed: "2026-05-02", pnl_sol: 0.2, strategy: "degen" });
+    seedPosition(db, { opened: "2026-05-03", closed: "2026-05-03", pnl_sol: 0.3, strategy: "sniper" });
+    expect(listStrategies(db).sort()).toEqual(["degen", "sniper"]);
+  });
+});
+
+describe("cumulativePnlSeries", () => {
+  it("returns running sum ordered by closed_at_ms", () => {
+    seedPosition(db, { opened: "2026-05-01", closed: "2026-05-01", pnl_sol: 0.1 });
+    seedPosition(db, { opened: "2026-05-02", closed: "2026-05-02", pnl_sol: -0.05 });
+    seedPosition(db, { opened: "2026-05-03", closed: "2026-05-03", pnl_sol: 0.2 });
+
+    const series = cumulativePnlSeries(db, {});
+    expect(series.map((p) => Number(p.cumulative.toFixed(6)))).toEqual([0.1, 0.05, 0.25]);
   });
 });
