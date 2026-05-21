@@ -5,6 +5,8 @@ import { Nav } from "@/components/nav";
 import { FilterBar } from "@/components/filter-bar";
 import { Toaster } from "@/components/ui/sonner";
 import { Suspense } from "react";
+import { listStrategies } from "@/lib/queries";
+import { db } from "@/lib/db";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -22,6 +24,8 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  let strategies: string[] = [];
+  try { strategies = listStrategies(db); } catch { /* DB not available at build time */ }
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} dark`}>
       <body className="min-h-screen bg-background text-foreground antialiased">
@@ -29,7 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div className="border-b">
           <div className="mx-auto max-w-7xl px-4 py-3">
             <Suspense fallback={null}>
-              <FilterBar />
+              <FilterBar strategies={strategies} />
             </Suspense>
           </div>
         </div>

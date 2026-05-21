@@ -2,7 +2,6 @@ import Database from "better-sqlite3";
 import path from "node:path";
 
 declare global {
-  // eslint-disable-next-line no-var
   var __charonDb: Database.Database | undefined;
 }
 

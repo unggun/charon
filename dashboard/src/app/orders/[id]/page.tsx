@@ -32,12 +32,25 @@ export default async function OrderDetailPage({
         <Badge variant="outline">{position.strategy_id}</Badge>
         <Badge variant="outline">{position.execution_mode}</Badge>
       </div>
+      <div className="text-xs text-muted-foreground">
+        Opened: {new Date(position.opened_at_ms).toLocaleString()}
+        {" · "}
+        Closed: {position.closed_at_ms != null ? new Date(position.closed_at_ms).toLocaleString() : "—"}
+      </div>
 
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-medium text-muted-foreground">PnL</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <CardContent className="grid grid-cols-2 gap-4 md:grid-cols-6">
+          <div>
+            <div className="text-xs text-muted-foreground">Entry price</div>
+            <div className="text-lg tabular-nums">{position.entry_price != null ? `$${Number(position.entry_price).toFixed(6)}` : "—"}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Exit price</div>
+            <div className="text-lg tabular-nums">{position.exit_price != null ? `$${Number(position.exit_price).toFixed(6)}` : "—"}</div>
+          </div>
           <div>
             <div className="text-xs text-muted-foreground">Entry mcap</div>
             <div className="text-lg tabular-nums">{formatMcap(position.entry_mcap)}</div>

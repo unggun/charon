@@ -13,7 +13,7 @@ const MODES = [
   { v: "live", label: "Live" },
 ];
 
-export function FilterBar() {
+export function FilterBar({ strategies = [] }: { strategies?: string[] }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -34,6 +34,7 @@ export function FilterBar() {
   const to = params.get("to") ?? "";
   const mode = params.get("mode") ?? "both";
   const lastN = params.get("lastN") ?? "";
+  const strategy = params.get("strategy") ?? null;
 
   return (
     <div className="flex flex-wrap items-center gap-3 text-sm">
@@ -63,6 +64,19 @@ export function FilterBar() {
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
+      {strategies.length > 0 && (
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button variant="outline" size="sm">Strategy: {strategy ?? "All"}</Button>} />
+          <DropdownMenuContent>
+            <DropdownMenuItem onSelect={() => update({ strategy: null })}>All</DropdownMenuItem>
+            {strategies.map((s) => (
+              <DropdownMenuItem key={s} onSelect={() => update({ strategy: s })}>
+                {s}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
       <Button variant="ghost" size="sm" onClick={() => update({ from: null, to: null, lastN: null, mode: null, strategy: null })}>
         Reset
       </Button>
