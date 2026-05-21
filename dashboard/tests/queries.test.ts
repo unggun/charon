@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type Database from "better-sqlite3";
 import { freshDb, seedPosition } from "./fixtures";
-import { overviewMetrics, listOrders, countOrders } from "../src/lib/queries";
+import { overviewMetrics, listOrders, countOrders, dailyPnl, monthDailyPnl } from "../src/lib/queries";
 
 let db: Database.Database;
 
@@ -118,5 +118,33 @@ describe("countOrders", () => {
     seedPosition(db, { opened: "2026-05-15", closed: "2026-05-15", pnl_sol: 0.2 });
     expect(countOrders(db, {})).toBe(2);
     expect(countOrders(db, { from: "2026-05-01", to: "2026-05-31" })).toBe(1);
+  });
+});
+
+describe("dailyPnl", () => {
+  it("groups by closed-at day", () => {
+    seedPosition(db, { opened: "2026-05-10", closed: "2026-05-10", pnl_sol: 0.1 });
+    seedPosition(db, { opened: "2026-05-10", closed: "2026-05-10", pnl_sol: 0.2 });
+    seedPosition(db, { opened: "2026-05-11", closed: "2026-05-11", pnl_sol: -0.05 });
+
+    const rows = dailyPnl(db, {});
+    const byDay = Object.fromEntries(rows.map((r) => [r.day, r]));
+    expect(byDay["2026-05-10"].pnl_sol).toBeCloseTo(0.3, 6);
+    expect(byDay["2026-05-10"].trades).toBe(2);
+    expect(byDay["2026-05-10"].wins).toBe(2);
+    expect(byDay["2026-05-11"].pnl_sol).toBeCloseTo(-0.05, 6);
+    expect(byDay["2026-05-11"].wins).toBe(0);
+  });
+});
+
+describe("monthDailyPnl", () => {
+  it("filters to a calendar month", () => {
+    seedPosition(db, { opened: "2026-04-30", closed: "2026-04-30", pnl_sol: 0.1 });
+    seedPosition(db, { opened: "2026-05-15", closed: "2026-05-15", pnl_sol: 0.2 });
+    seedPosition(db, { opened: "2026-06-01", closed: "2026-06-01", pnl_sol: 0.3 });
+
+    const rows = monthDailyPnl(db, {}, 2026, 5);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].day).toBe("2026-05-15");
   });
 });

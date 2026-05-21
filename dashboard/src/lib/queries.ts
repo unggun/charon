@@ -146,3 +146,43 @@ export function countOrders(db: Database.Database, f: Filters): number {
     .get(...params) as { n: number };
   return row.n;
 }
+
+export interface DailyPnlRow {
+  day: string;     // YYYY-MM-DD
+  pnl_sol: number;
+  trades: number;
+  wins: number;
+}
+
+export function dailyPnl(db: Database.Database, f: Filters): DailyPnlRow[] {
+  const { clauses, params } = whereWithLimit(db, f);
+  return db
+    .prepare(
+      `SELECT
+         date(closed_at_ms / 1000, 'unixepoch') AS day,
+         COALESCE(SUM(pnl_sol), 0) AS pnl_sol,
+         COUNT(*) AS trades,
+         COUNT(*) FILTER (WHERE pnl_sol > 0) AS wins
+       FROM dry_run_positions WHERE ${clauses.join(" AND ")}
+       GROUP BY day
+       ORDER BY day ASC`
+    )
+    .all(...params) as DailyPnlRow[];
+}
+
+export function monthDailyPnl(
+  db: Database.Database,
+  f: Filters,
+  year: number,
+  month: number,   // 1-12
+): DailyPnlRow[] {
+  const mm = String(month).padStart(2, "0");
+  const firstDay = `${year}-${mm}-01`;
+  const lastDay = lastDayOfMonth(year, month);
+  return dailyPnl(db, { ...f, from: firstDay, to: lastDay });
+}
+
+function lastDayOfMonth(year: number, month: number): string {
+  const date = new Date(Date.UTC(year, month, 0));
+  return `${year}-${String(month).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+}
