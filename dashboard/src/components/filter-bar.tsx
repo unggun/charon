@@ -54,9 +54,7 @@ export function FilterBar() {
         />
       </label>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm">Mode: {MODES.find((m) => m.v === mode)?.label}</Button>
-        </DropdownMenuTrigger>
+        <DropdownMenuTrigger render={<Button variant="outline" size="sm">Mode: {MODES.find((m) => m.v === mode)?.label}</Button>} />
         <DropdownMenuContent>
           {MODES.map((m) => (
             <DropdownMenuItem key={m.v} onSelect={() => update({ mode: m.v === "both" ? null : m.v })}>
