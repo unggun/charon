@@ -1,36 +1,88 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Charon Dashboard
 
-## Getting Started
+Private Next.js dashboard for the Charon trading bot. Public hostname is
+gated by Cloudflare Zero Trust Access; the Node process binds to localhost
+only and reaches the public internet via a Cloudflare Tunnel.
 
-First, run the development server:
+## Architecture
+
+- **Process**: Next.js 16 server, bound to `127.0.0.1:3000`, managed by PM2
+  (`charon-dashboard`).
+- **Storage**: opens `/opt/charon/charon.sqlite` in readonly mode via a lazy
+  `Proxy` in `src/lib/db.ts`. WAL mode on the bot's DB lets reads happen
+  while the bot writes.
+- **Exposure**: `cloudflared` tunnel `charon-dashboard` reverse-proxies
+  `charon.andreas-unggun.my.id` to `127.0.0.1:3000`. No inbound ports on the
+  VPS.
+- **Auth**: Cloudflare Zero Trust Access — one-time PIN to allow-listed
+  emails, 24h sessions.
+
+## Local dev
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cd dashboard
+npm install
+CHARON_DB_PATH=/opt/charon/charon.sqlite npm run dev -- --hostname 127.0.0.1 --port 3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`CHARON_DB_PATH` is required in dev because the default
+`path.resolve(cwd, "..", "charon.sqlite")` only works when the dashboard
+lives at `/opt/charon/dashboard/`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Tests
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+cd dashboard
+npm test   # vitest, ~48 cases, in-memory SQLite fixtures
+```
 
-## Learn More
+## Production (on the VPS)
 
-To learn more about Next.js, take a look at the following resources:
+The dashboard runs under PM2 as `charon-dashboard`, alongside the bot
+(`charon`) and other PM2-managed processes.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+pm2 status
+pm2 logs charon-dashboard       # tail
+pm2 logs charon-dashboard --lines 200
+pm2 restart charon-dashboard
+pm2 reload charon-dashboard     # zero-downtime
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Logs land at `/var/log/pm2/charon-dashboard.{out,err}.log` per
+`ecosystem.config.cjs`.
 
-## Deploy on Vercel
+### Deploy a new version
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+cd /opt/charon
+git pull
+cd dashboard
+npm install
+CHARON_DB_PATH=/opt/charon/charon.sqlite npm run build
+pm2 restart charon-dashboard
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Tunnel
+
+`cloudflared` runs as a systemd service (its standard installer):
+
+```bash
+sudo systemctl status cloudflared
+sudo journalctl -u cloudflared -n 50
+```
+
+Tunnel config at `/etc/cloudflared/config.yml`; credentials at
+`/etc/cloudflared/<tunnel-id>.json` (also stored at `~/.cloudflared/`).
+Tunnel name: `charon-dashboard`. Hostname: `charon.andreas-unggun.my.id`.
+
+### Access policy
+
+Cloudflare Zero Trust → Access → Applications → `Charon Dashboard`.
+Allowed emails managed there. Session 24h, identity provider is one-time PIN
+by default.
+
+## Spec & plan
+
+See `docs/superpowers/specs/2026-05-21-dashboard-design.md` and
+`docs/superpowers/plans/2026-05-21-dashboard.md` in the repo root.
