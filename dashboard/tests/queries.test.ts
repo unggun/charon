@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type Database from "better-sqlite3";
 import { freshDb, seedPosition } from "./fixtures";
-import { overviewMetrics } from "../src/lib/queries";
+import { overviewMetrics, listOrders, countOrders } from "../src/lib/queries";
 
 let db: Database.Database;
 
@@ -82,5 +82,41 @@ describe("overviewMetrics", () => {
     const m = overviewMetrics(db, { lastN: 2 });
     expect(m.totalTrades).toBe(2);
     expect(m.totalPnlSol).toBeCloseTo(0.5, 6);
+  });
+});
+
+describe("listOrders", () => {
+  it("returns paginated closed positions, newest first", () => {
+    for (let d = 1; d <= 5; d++) {
+      seedPosition(db, { opened: `2026-05-0${d}`, closed: `2026-05-0${d}`, pnl_sol: d * 0.1 });
+    }
+    const page1 = listOrders(db, {}, { page: 1, pageSize: 3, sort: "closed_at_ms", dir: "desc" });
+    expect(page1).toHaveLength(3);
+    expect(page1[0].pnl_sol).toBeCloseTo(0.5, 6);
+
+    const page2 = listOrders(db, {}, { page: 2, pageSize: 3, sort: "closed_at_ms", dir: "desc" });
+    expect(page2).toHaveLength(2);
+  });
+
+  it("supports sort by pnl_sol asc", () => {
+    seedPosition(db, { opened: "2026-05-01", closed: "2026-05-01", pnl_sol: 0.1 });
+    seedPosition(db, { opened: "2026-05-02", closed: "2026-05-02", pnl_sol: -0.3 });
+    seedPosition(db, { opened: "2026-05-03", closed: "2026-05-03", pnl_sol: 0.2 });
+
+    const rows = listOrders(db, {}, { page: 1, pageSize: 10, sort: "pnl_sol", dir: "asc" });
+    expect(rows.map((r) => r.pnl_sol)).toEqual([-0.3, 0.1, 0.2]);
+  });
+
+  it("rejects invalid sort column", () => {
+    expect(() => listOrders(db, {}, { page: 1, pageSize: 10, sort: "drop_table" as never, dir: "asc" })).toThrow();
+  });
+});
+
+describe("countOrders", () => {
+  it("counts closed positions matching filters", () => {
+    seedPosition(db, { opened: "2026-04-01", closed: "2026-04-01", pnl_sol: 0.1 });
+    seedPosition(db, { opened: "2026-05-15", closed: "2026-05-15", pnl_sol: 0.2 });
+    expect(countOrders(db, {})).toBe(2);
+    expect(countOrders(db, { from: "2026-05-01", to: "2026-05-31" })).toBe(1);
   });
 });

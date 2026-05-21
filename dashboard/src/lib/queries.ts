@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import type { Filters } from "./types";
+import type { Filters, PositionRow } from "./types";
 
 interface WhereBuild {
   clauses: string[];
@@ -100,4 +100,49 @@ export function overviewMetrics(db: Database.Database, f: Filters): OverviewMetr
     bestTrade: row.best,
     worstTrade: row.worst,
   };
+}
+
+const SORT_COLUMNS = new Set([
+  "opened_at_ms",
+  "closed_at_ms",
+  "pnl_sol",
+  "pnl_percent",
+  "entry_mcap",
+  "exit_mcap",
+  "symbol",
+]);
+
+export interface OrdersListOptions {
+  page: number;
+  pageSize: number;
+  sort: "opened_at_ms" | "closed_at_ms" | "pnl_sol" | "pnl_percent" | "entry_mcap" | "exit_mcap" | "symbol";
+  dir: "asc" | "desc";
+}
+
+export function listOrders(
+  db: Database.Database,
+  f: Filters,
+  opts: OrdersListOptions,
+): PositionRow[] {
+  if (!SORT_COLUMNS.has(opts.sort)) {
+    throw new Error(`invalid sort column: ${opts.sort}`);
+  }
+  const dir = opts.dir === "asc" ? "ASC" : "DESC";
+  const { clauses, params } = whereWithLimit(db, f);
+  const offset = (opts.page - 1) * opts.pageSize;
+  return db
+    .prepare(
+      `SELECT * FROM dry_run_positions WHERE ${clauses.join(" AND ")}
+       ORDER BY ${opts.sort} ${dir}
+       LIMIT ? OFFSET ?`
+    )
+    .all(...params, opts.pageSize, offset) as PositionRow[];
+}
+
+export function countOrders(db: Database.Database, f: Filters): number {
+  const { clauses, params } = whereWithLimit(db, f);
+  const row = db
+    .prepare(`SELECT COUNT(*) AS n FROM dry_run_positions WHERE ${clauses.join(" AND ")}`)
+    .get(...params) as { n: number };
+  return row.n;
 }
