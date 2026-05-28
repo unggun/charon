@@ -92,6 +92,11 @@ export const strategyNumericLabels = {
   max_hold_ms: 'maximum hold milliseconds',
   min_fee_density_sol_per_hour: 'minimum fee density (SOL per hour)',
   min_trench_score: 'minimum trench score (0-100)',
+  min_organic_score: 'minimum Jupiter organic score (0-100, 0 = off)',
+  skip_bonding_band_min: 'lower edge of bonding-curve skip band % (0 = off)',
+  skip_bonding_band_max: 'upper edge of bonding-curve skip band % (0 = off; e.g. 99 to skip 80-99)',
+  rug_guard_drop_pct: 'emergency exit if mcap drops this % from peak (0 = off)',
+  max_jup_bundler_ath_pct: 'max Jupiter bundler ATH supply % (0 = off; e.g. 5 to skip bundler-heavy tokens)',
   early_stage_mcap_threshold_usd: 'mcap threshold below which a candidate is "early" (USD)',
   early_llm_min_confidence: 'early-stage LLM minimum confidence percent (null = use main)',
   early_min_fee_claim_sol: 'early-stage minimum creator fee-claim SOL (null = use main)',
@@ -220,6 +225,9 @@ export function strategyMenuText() {
     strat.max_hold_ms > 0 ? `Max hold: ${Math.round(strat.max_hold_ms / 60000)}m` : null,
     strat.min_trench_score > 0 ? `Min trench score: ${strat.min_trench_score}` : null,
     strat.min_fee_density_sol_per_hour > 0 ? `Min fee density: ${strat.min_fee_density_sol_per_hour} SOL/hr` : null,
+    strat.min_organic_score > 0 ? `Min organic score: ${strat.min_organic_score}` : null,
+    strat.skip_bonding_band_max > 0 ? `Skip bonding ${strat.skip_bonding_band_min}-${strat.skip_bonding_band_max}%` : null,
+    strat.max_jup_bundler_ath_pct > 0 ? `Max bundler ATH: ${strat.max_jup_bundler_ath_pct}%` : null,
     strat.use_llm ? `LLM: yes (min ${strat.llm_min_confidence}%)` : 'LLM: no (rule-based)',
     '',
     ...all.map(s => `${s.enabled ? '▶' : '○'} ${s.name}`),
@@ -292,6 +300,13 @@ export function strategyKeyboard() {
     [
       { text: `Fee Density ${strat.min_fee_density_sol_per_hour > 0 ? strat.min_fee_density_sol_per_hour : 'off'}`, callback_data: 'stratinput:min_fee_density_sol_per_hour' },
       { text: `Trench Score ${strat.min_trench_score > 0 ? strat.min_trench_score : 'off'}`, callback_data: 'stratinput:min_trench_score' },
+    ],
+    [
+      { text: `Organic ${strat.min_organic_score > 0 ? strat.min_organic_score : 'off'}`, callback_data: 'stratinput:min_organic_score' },
+      { text: `Bond Skip ${strat.skip_bonding_band_max > 0 ? `${strat.skip_bonding_band_min}-${strat.skip_bonding_band_max}` : 'off'}`, callback_data: 'stratinput:skip_bonding_band_max' },
+    ],
+    [
+      { text: `Bundler ATH ${strat.max_jup_bundler_ath_pct > 0 ? `${strat.max_jup_bundler_ath_pct}%` : 'off'}`, callback_data: 'stratinput:max_jup_bundler_ath_pct' },
     ],
     [
       { text: `Early Mcap ${strat.early_stage_mcap_threshold_usd ? fmtUsd(strat.early_stage_mcap_threshold_usd) : 'off'}`, callback_data: 'stratinput:early_stage_mcap_threshold_usd' },

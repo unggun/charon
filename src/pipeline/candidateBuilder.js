@@ -138,6 +138,41 @@ export function filterCandidate(candidate, strat = null) {
     }
   }
 
+  // Jupiter organic score — only enforce when jupiterAsset is available
+  const minOrganic = Number(strat.min_organic_score ?? 0);
+  if (minOrganic > 0 && candidate.jupiterAsset) {
+    const organic = Number(candidate.jupiterAsset.organicScore);
+    if (Number.isFinite(organic) && organic < minOrganic) {
+      failures.push(`organic score: ${organic.toFixed(1)} < ${minOrganic}`);
+    }
+  }
+
+  // Bonding-curve danger band — skip tokens whose bondingCurve % is inside the
+  // configured [min, max] inclusive range. Both endpoints must be > 0 to enable,
+  // so partial config doesn't accidentally skip all pre-graduated tokens.
+  // Typical config: 80..99 to dodge the pre-migration dump zone.
+  const bandMin = Number(strat.skip_bonding_band_min ?? 0);
+  const bandMax = Number(strat.skip_bonding_band_max ?? 0);
+  if (bandMin > 0 && bandMax >= bandMin && candidate.jupiterAsset) {
+    const bonding = Number(candidate.jupiterAsset.bondingCurve);
+    if (Number.isFinite(bonding) && bonding >= bandMin && bonding <= bandMax) {
+      failures.push(`bonding curve: ${bonding}% in skip band [${bandMin}-${bandMax}]`);
+    }
+  }
+
+  // Jupiter bundler ATH holding — rejects tokens whose bundler cohort ever
+  // controlled more than the threshold % of supply. The existing
+  // trending_max_bundler_rate gate reads candidate.trending.bundler_rate which
+  // the signal server does not populate, so it's effectively dead; this is the
+  // real check. Reads jupiterAsset.audit.bundlerStats.holdingPctATH.
+  const maxBundlerAth = Number(strat.max_jup_bundler_ath_pct ?? 0);
+  if (maxBundlerAth > 0) {
+    const ath = Number(candidate.jupiterAsset?.audit?.bundlerStats?.holdingPctATH);
+    if (Number.isFinite(ath) && ath > maxBundlerAth) {
+      failures.push(`bundler ATH: ${ath.toFixed(2)}% > ${maxBundlerAth}%`);
+    }
+  }
+
   return { passed: failures.length === 0, failures, strategy: strat.id };
 }
 

@@ -114,6 +114,7 @@ export async function refreshPosition(position, { autoExit = true, jupiterPnl = 
   if (!Number.isFinite(Number(mcap)) || !Number.isFinite(Number(position.entry_mcap)) || Number(position.entry_mcap) <= 0) {
     return null;
   }
+  const strat = strategyById(position.strategy_id);
   const highWaterMcap = Math.max(Number(position.high_water_mcap || 0), Number(mcap));
   const highWaterPrice = Math.max(Number(position.high_water_price || 0), Number(price || 0));
   let pnlPercent = (Number(mcap) / Number(position.entry_mcap) - 1) * 100;
@@ -122,16 +123,19 @@ export async function refreshPosition(position, { autoExit = true, jupiterPnl = 
     pnlPercent = Number(jupiterPnl.totalPnlPercentageNative);
     pnlSol = Number.isFinite(Number(jupiterPnl.totalPnlNative)) ? Number(jupiterPnl.totalPnlNative) : pnlSol;
   }
+  // Arm trailing on high-water reaching a threshold, not on TP-hit.
+  // Memecoins often peak below TP and dump; gating on TP strands those positions.
+  const peakPnlPercent = (highWaterMcap / Number(position.entry_mcap) - 1) * 100;
+  const trailingArmThreshold = Number(strat?.trailing_arm_at_percent ?? 25);
   const tpHit = pnlPercent >= Number(position.tp_percent);
   const slHit = pnlPercent <= Number(position.sl_percent);
-  const trailingArmed = position.trailing_armed || (position.trailing_enabled && tpHit);
+  const trailingArmed = Boolean(position.trailing_armed)
+    || (position.trailing_enabled && peakPnlPercent >= trailingArmThreshold);
   const trailDrop = highWaterMcap > 0 ? (Number(mcap) / highWaterMcap - 1) * 100 : 0;
   const trailingHit = trailingArmed && position.trailing_enabled && trailDrop <= -Math.abs(Number(position.trailing_percent));
   let exitReason = null;
   let closed = false;
 
-  // Max hold time check
-  const strat = strategyById(position.strategy_id);
   if (strat?.max_hold_ms > 0 && (now() - position.opened_at_ms) >= strat.max_hold_ms) {
     exitReason = 'MAX_HOLD';
   }
@@ -159,6 +163,13 @@ export async function refreshPosition(position, { autoExit = true, jupiterPnl = 
         console.log(`[position] ${position.id} partial sell failed: ${err.message}`);
       }
     }
+  }
+
+  // Rug guard: catastrophic drop from peak fires regardless of trailing-armed state.
+  // Takes label precedence over SL when both would fire.
+  const rugGuardThreshold = Number(strat?.rug_guard_drop_pct ?? 0);
+  if (!exitReason && rugGuardThreshold > 0 && highWaterMcap > 0 && trailDrop <= -rugGuardThreshold) {
+    exitReason = 'RUG_GUARD';
   }
 
   // Standard exit checks

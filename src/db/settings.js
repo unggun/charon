@@ -96,5 +96,10 @@ function defaultStrategy() {
     early_min_holders: null,
     early_max_top20_holder_percent: null,
     min_trench_score: 0,
+    min_organic_score: 0,
+    skip_bonding_band_min: 0,
+    skip_bonding_band_max: 0,
+    rug_guard_drop_pct: 50,
+    max_jup_bundler_ath_pct: 0,
   };
 }
