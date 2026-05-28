@@ -106,6 +106,9 @@ export async function handleCallback(query) {
       return;
     }
     const positionId = await createDryRunPosition(row.id, candidate, decision, 'manual_buy');
+    if (!positionId) {
+      return bot.sendMessage(chatId, `Max open positions reached (${openPositionCount()}/${numSetting('max_open_positions', 3)}). Close one first or raise the limit.`);
+    }
     logDecisionEvent({
       batchId: 'manual',
       triggerCandidateId: row.id,

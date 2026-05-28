@@ -152,6 +152,19 @@ export async function handleApprovedBuy(selectedRow, decision, batchId, rows = [
 
   if (mode === 'dry_run') {
     const positionId = await createDryRunPosition(freshSelectedRow.id, freshSelectedRow.candidate, decision, `llm_batch_${batchId}`);
+    if (!positionId) {
+      logDecisionEvent({
+        batchId,
+        triggerCandidateId,
+        selectedRow: freshSelectedRow,
+        rows: executionRows,
+        decision,
+        mode,
+        action: 'entry_skipped_max_positions_race',
+        guardrails: { maxOpenPositions: numSetting('max_open_positions', 3), openPositions: openPositionCount() },
+      });
+      return;
+    }
     logDecisionEvent({
       batchId,
       triggerCandidateId,

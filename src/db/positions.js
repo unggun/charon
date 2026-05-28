@@ -35,12 +35,21 @@ export function createDryRunPosition(candidateId, candidate, decision, reason = 
   const sl = Number(decision.suggested_sl_percent || strat.sl_percent || numSetting('default_sl_percent', -25));
   const trailingEnabled = (strat.trailing_enabled ?? boolSetting('default_trailing_enabled', true)) ? 1 : 0;
   const trailingPercent = strat.trailing_percent ?? numSetting('default_trailing_percent', 20);
+  const maxOpen = strat.max_open_positions ?? numSetting('max_open_positions', 3);
 
   return db.transaction(() => {
     const existing = db.prepare(`
       SELECT id FROM dry_run_positions WHERE mint = ? AND status = 'open' LIMIT 1
     `).get(candidate.token.mint);
     if (existing) return existing.id;
+
+    if (maxOpen > 0) {
+      const openCount = db.prepare(`SELECT COUNT(*) AS count FROM dry_run_positions WHERE status = 'open'`).get().count;
+      if (openCount >= maxOpen) {
+        console.log(`[positions] race-guard: ${openCount}/${maxOpen} open, rejecting ${candidate.token.mint.slice(0, 8)}...`);
+        return null;
+      }
+    }
 
     const result = db.prepare(`
       INSERT INTO dry_run_positions (
