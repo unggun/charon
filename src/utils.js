@@ -110,11 +110,31 @@ export function parseDistFees(data) {
   return { timestamp, mint, bondingCurve, sharingConfig, admin, shareholders, distributed };
 }
 
+export function repairJson(raw) {
+  let s = String(raw || '');
+  s = s.replace(/,(\s*[}\]])/g, '$1');
+  s = s.replace(/("(?:[^"\\]|\\.)*"|true|false|null|-?\d+(?:\.\d+)?)(\s*)("(?:[^"\\]|\\.)*"\s*:)/g, '$1,$2$3');
+  s = s.replace(/([}\]])(\s*)([\[{])/g, '$1,$2$3');
+  return s;
+}
+
 export function strictJsonFromText(text) {
   const clean = stripThinking(text);
   const fenced = clean.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1];
   const raw = fenced || clean.match(/\{[\s\S]*\}/)?.[0] || clean;
-  return JSON.parse(raw);
+  try {
+    return JSON.parse(raw);
+  } catch (err) {
+    const repaired = repairJson(raw);
+    if (repaired !== raw) {
+      try {
+        const parsed = JSON.parse(repaired);
+        console.log(`[json] repaired malformed LLM JSON (${err.message})`);
+        return parsed;
+      } catch {}
+    }
+    throw err;
+  }
 }
 
 export function parseNumericInput(value) {

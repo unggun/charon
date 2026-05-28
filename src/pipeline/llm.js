@@ -109,18 +109,30 @@ export async function decideCandidateBatch(rows, triggerCandidateId) {
     candidates: rows.map(compactCandidateForLlm),
   };
 
+  const requestBody = {
+    model: LLM_MODEL,
+    temperature: 0.2,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: JSON.stringify(user) },
+    ],
+  };
+  const requestOpts = {
+    timeout: LLM_TIMEOUT_MS,
+    headers: { authorization: `Bearer ${LLM_API_KEY}`, 'content-type': 'application/json' },
+  };
+  const completionsUrl = `${LLM_BASE_URL.replace(/\/$/, '')}/chat/completions`;
+  const isTimeout = (err) => err?.code === 'ECONNABORTED' || /timeout/i.test(err?.message || '');
+
   try {
-    const res = await axios.post(`${LLM_BASE_URL.replace(/\/$/, '')}/chat/completions`, {
-      model: LLM_MODEL,
-      temperature: 0.2,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: JSON.stringify(user) },
-      ],
-    }, {
-      timeout: LLM_TIMEOUT_MS,
-      headers: { authorization: `Bearer ${LLM_API_KEY}`, 'content-type': 'application/json' },
-    });
+    let res;
+    try {
+      res = await axios.post(completionsUrl, requestBody, requestOpts);
+    } catch (err) {
+      if (!isTimeout(err)) throw err;
+      console.log(`[llm] batch timeout, retrying once (${err.message})`);
+      res = await axios.post(completionsUrl, requestBody, requestOpts);
+    }
     const content = res.data?.choices?.[0]?.message?.content || '';
     const parsed = strictJsonFromText(content);
     const decision = normalizeDecision(parsed);
