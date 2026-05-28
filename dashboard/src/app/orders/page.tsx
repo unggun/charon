@@ -15,6 +15,8 @@ const VALID_SORTS = new Set<OrdersListOptions["sort"]>([
   "entry_mcap",
   "exit_mcap",
   "symbol",
+  "peak_pct",
+  "trough_pct",
 ]);
 
 export default async function OrdersPage({

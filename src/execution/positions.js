@@ -117,6 +117,12 @@ export async function refreshPosition(position, { autoExit = true, jupiterPnl = 
   const strat = strategyById(position.strategy_id);
   const highWaterMcap = Math.max(Number(position.high_water_mcap || 0), Number(mcap));
   const highWaterPrice = Math.max(Number(position.high_water_price || 0), Number(price || 0));
+  // Legacy rows opened before low_water tracking start with NULL; seed from entry so drawdown
+  // is measured from the trade open rather than from the moment the column appeared.
+  const prevLowMcap = Number(position.low_water_mcap ?? position.entry_mcap ?? mcap);
+  const prevLowPrice = Number(position.low_water_price ?? position.entry_price ?? price ?? 0);
+  const lowWaterMcap = Math.min(prevLowMcap, Number(mcap));
+  const lowWaterPrice = price > 0 && prevLowPrice > 0 ? Math.min(prevLowPrice, Number(price)) : (Number(price) || prevLowPrice);
   let pnlPercent = (Number(mcap) / Number(position.entry_mcap) - 1) * 100;
   let pnlSol = Number(position.size_sol) * pnlPercent / 100;
   if (jupiterPnl && Number.isFinite(Number(jupiterPnl.totalPnlPercentageNative))) {
@@ -185,9 +191,11 @@ export async function refreshPosition(position, { autoExit = true, jupiterPnl = 
 
   db.prepare(`
     UPDATE dry_run_positions
-    SET high_water_mcap = ?, high_water_price = ?, trailing_armed = ?
+    SET high_water_mcap = ?, high_water_price = ?,
+        low_water_mcap = ?, low_water_price = ?,
+        trailing_armed = ?
     WHERE id = ?
-  `).run(highWaterMcap, highWaterPrice, trailingArmed ? 1 : 0, position.id);
+  `).run(highWaterMcap, highWaterPrice, lowWaterMcap, lowWaterPrice, trailingArmed ? 1 : 0, position.id);
 
   if (exitReason && autoExit && position.execution_mode === 'live') {
     if (sellInProgress.has(position.id)) return { ...position, exitReason: null };
@@ -237,6 +245,8 @@ export async function refreshPosition(position, { autoExit = true, jupiterPnl = 
     highWaterMcap,
     high_water_mcap: highWaterMcap,
     high_water_price: highWaterPrice,
+    low_water_mcap: lowWaterMcap,
+    low_water_price: lowWaterPrice,
     pnlPercent: finalPnlPercent,
     pnl_percent: finalPnlPercent,
     pnlSol: finalPnlSol,

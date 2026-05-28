@@ -17,6 +17,8 @@ export function freshDb(): Database.Database {
       token_amount_est REAL,
       high_water_price REAL,
       high_water_mcap REAL,
+      low_water_price REAL,
+      low_water_mcap REAL,
       tp_percent REAL NOT NULL,
       sl_percent REAL NOT NULL,
       trailing_enabled INTEGER NOT NULL,

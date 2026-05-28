@@ -102,20 +102,22 @@ export function overviewMetrics(db: Database.Database, f: Filters): OverviewMetr
   };
 }
 
-const SORT_COLUMNS = new Set([
-  "opened_at_ms",
-  "closed_at_ms",
-  "pnl_sol",
-  "pnl_percent",
-  "entry_mcap",
-  "exit_mcap",
-  "symbol",
-]);
+const SORT_EXPRESSIONS: Record<string, string> = {
+  opened_at_ms: "opened_at_ms",
+  closed_at_ms: "closed_at_ms",
+  pnl_sol: "pnl_sol",
+  pnl_percent: "pnl_percent",
+  entry_mcap: "entry_mcap",
+  exit_mcap: "exit_mcap",
+  symbol: "symbol",
+  peak_pct: "(high_water_mcap / NULLIF(entry_mcap, 0) - 1)",
+  trough_pct: "(low_water_mcap / NULLIF(entry_mcap, 0) - 1)",
+};
 
 export interface OrdersListOptions {
   page: number;
   pageSize: number;
-  sort: "opened_at_ms" | "closed_at_ms" | "pnl_sol" | "pnl_percent" | "entry_mcap" | "exit_mcap" | "symbol";
+  sort: "opened_at_ms" | "closed_at_ms" | "pnl_sol" | "pnl_percent" | "entry_mcap" | "exit_mcap" | "symbol" | "peak_pct" | "trough_pct";
   dir: "asc" | "desc";
 }
 
@@ -124,7 +126,8 @@ export function listOrders(
   f: Filters,
   opts: OrdersListOptions,
 ): PositionRow[] {
-  if (!SORT_COLUMNS.has(opts.sort)) {
+  const sortExpr = SORT_EXPRESSIONS[opts.sort];
+  if (!sortExpr) {
     throw new Error(`invalid sort column: ${opts.sort}`);
   }
   const dir = opts.dir === "asc" ? "ASC" : "DESC";
@@ -133,7 +136,7 @@ export function listOrders(
   return db
     .prepare(
       `SELECT * FROM dry_run_positions WHERE ${clauses.join(" AND ")}
-       ORDER BY ${opts.sort} ${dir}
+       ORDER BY ${sortExpr} ${dir}
        LIMIT ? OFFSET ?`
     )
     .all(...params, opts.pageSize, offset) as PositionRow[];

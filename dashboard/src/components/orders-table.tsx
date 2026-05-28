@@ -15,6 +15,8 @@ const COLUMNS = [
   { key: "exit_mcap", label: "Exit mcap" },
   { key: "pnl_sol", label: "PnL" },
   { key: "pnl_percent", label: "%" },
+  { key: "peak_pct", label: "Peak %" },
+  { key: "trough_pct", label: "Trough %" },
 ] as const;
 
 interface Props {
@@ -73,6 +75,12 @@ export function OrdersTable({ rows, total, page, pageSize, sort, dir }: Props) {
           {rows.map((r) => {
             const duration = r.closed_at_ms ? r.closed_at_ms - r.opened_at_ms : 0;
             const pnlColor = (r.pnl_sol ?? 0) >= 0 ? "text-emerald-400" : "text-red-400";
+            const peakPct = r.entry_mcap && r.high_water_mcap
+              ? (r.high_water_mcap / r.entry_mcap - 1) * 100
+              : null;
+            const troughPct = r.entry_mcap && r.low_water_mcap
+              ? (r.low_water_mcap / r.entry_mcap - 1) * 100
+              : null;
             return (
               <TableRow key={r.id} className="cursor-pointer hover:bg-muted/40">
                 <TableCell className="text-muted-foreground">
@@ -97,6 +105,12 @@ export function OrdersTable({ rows, total, page, pageSize, sort, dir }: Props) {
                 </TableCell>
                 <TableCell className={pnlColor}>
                   <Link href={`/orders/${r.id}`}>{formatPercent(r.pnl_percent)}</Link>
+                </TableCell>
+                <TableCell className="text-emerald-400">
+                  <Link href={`/orders/${r.id}`}>{formatPercent(peakPct)}</Link>
+                </TableCell>
+                <TableCell className="text-red-400">
+                  <Link href={`/orders/${r.id}`}>{formatPercent(troughPct)}</Link>
                 </TableCell>
                 <TableCell>
                   <Link href={`/orders/${r.id}`}>{r.exit_reason ?? "—"}</Link>

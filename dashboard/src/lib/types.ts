@@ -14,6 +14,8 @@ export interface PositionRow {
   entry_mcap: number | null;
   high_water_price: number | null;
   high_water_mcap: number | null;
+  low_water_price: number | null;
+  low_water_mcap: number | null;
   exit_price: number | null;
   exit_mcap: number | null;
   exit_reason: string | null;

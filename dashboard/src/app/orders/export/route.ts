@@ -5,7 +5,7 @@ import type { PositionRow } from "@/lib/types";
 
 const EXPORT_CAP = 10_000;
 
-const VALID_SORTS = new Set(["opened_at_ms", "closed_at_ms", "pnl_sol", "pnl_percent", "entry_mcap", "exit_mcap", "symbol"]);
+const VALID_SORTS = new Set(["opened_at_ms", "closed_at_ms", "pnl_sol", "pnl_percent", "entry_mcap", "exit_mcap", "symbol", "peak_pct", "trough_pct"]);
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -30,6 +30,8 @@ export async function GET(req: Request) {
     "exit_mcap",
     "pnl_sol",
     "pnl_percent",
+    "peak_pct",
+    "trough_pct",
     "exit_reason",
     "size_sol",
   ];
@@ -58,6 +60,8 @@ function rowToCsv(r: PositionRow): string {
     r.exit_mcap ?? "",
     r.pnl_sol ?? "",
     r.pnl_percent ?? "",
+    r.entry_mcap && r.high_water_mcap ? (r.high_water_mcap / r.entry_mcap - 1) * 100 : "",
+    r.entry_mcap && r.low_water_mcap ? (r.low_water_mcap / r.entry_mcap - 1) * 100 : "",
     r.exit_reason ?? "",
     r.size_sol,
   ];
