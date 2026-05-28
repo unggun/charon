@@ -1,6 +1,28 @@
 import axios from 'axios';
 import { now } from '../utils.js';
 
+const TWITTER_404_TTL_MS = 60 * 60 * 1000;
+const TWITTER_404_MAX = 2000;
+const twitter404Cache = new Map();
+
+function isUrl404Cached(url) {
+  const at = twitter404Cache.get(url);
+  if (!at) return false;
+  if (now() - at > TWITTER_404_TTL_MS) {
+    twitter404Cache.delete(url);
+    return false;
+  }
+  return true;
+}
+
+function rememberUrl404(url) {
+  if (twitter404Cache.size >= TWITTER_404_MAX) {
+    const oldestKey = twitter404Cache.keys().next().value;
+    if (oldestKey) twitter404Cache.delete(oldestKey);
+  }
+  twitter404Cache.set(url, now());
+}
+
 function extractTweetUrl(input) {
   const urls = [
     input?.twitter,
@@ -81,6 +103,9 @@ function viralityScore(metrics) {
 async function fetchTwitterNarrative(graduatedCoin, gmgn) {
   const url = extractTweetUrl(graduatedCoin) || extractTweetUrl(gmgn);
   if (!url) return null;
+  if (isUrl404Cached(url)) {
+    return { url, fxUrl: toFxTwitter(url), text: null, error: 'cached_404' };
+  }
   try {
     const apiUrl = toFxTwitterApi(url);
     const api = await axios.get(apiUrl, {
@@ -91,7 +116,12 @@ async function fetchTwitterNarrative(graduatedCoin, gmgn) {
     const metrics = extractTweetMetricsFromFx(api.data);
     return { url, fxUrl: toFxTwitter(url), apiUrl, text, metrics, virality: viralityScore(metrics) };
   } catch (apiErr) {
-    console.log(`[twitter] api ${url} ${apiErr.response?.status || ''} ${apiErr.message}`);
+    const status = apiErr.response?.status;
+    console.log(`[twitter] api ${url} ${status || ''} ${apiErr.message}`);
+    if (status === 404) {
+      rememberUrl404(url);
+      return { url, fxUrl: toFxTwitter(url), text: null, error: 'tweet_not_found' };
+    }
   }
 
   try {
@@ -105,6 +135,7 @@ async function fetchTwitterNarrative(graduatedCoin, gmgn) {
     return { url, fxUrl, text, metrics, virality: viralityScore(metrics) };
   } catch (err) {
     console.log(`[twitter] ${url} ${err.message}`);
+    if (err.response?.status === 404) rememberUrl404(url);
     return { url, fxUrl: toFxTwitter(url), text: null, error: err.message };
   }
 }
