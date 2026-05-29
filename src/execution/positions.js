@@ -15,6 +15,9 @@ import { trending } from '../signals/trending.js';
 import { executeLiveSell } from './router.js';
 import { sendPositionExit } from '../telegram/send.js';
 
+const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+const int = (v) => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : null);
+
 export async function freshEntryMarket(mint, candidate) {
   const gmgn = await fetchGmgnTokenInfo(mint, false);
   const asset = await fetchJupiterAsset(mint, { useCache: false });
@@ -176,8 +179,6 @@ export async function refreshPosition(position, { autoExit = true, jupiterPnl = 
     WHERE id = ?
   `).run(highWaterMcap, highWaterPrice, lowWaterMcap, lowWaterPrice, trailingArmed ? 1 : 0, position.id);
 
-  const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
-  const int = (v) => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : null);
   try {
     const s5 = asset?.stats5m || {};
     const au = asset?.audit || {};
