@@ -14,6 +14,9 @@ import { evaluateExit } from '../src/execution/exitLogic.js';
 const POSITION_FIELDS = ['tp_percent', 'sl_percent', 'trailing_percent', 'trailing_enabled'];
 
 export function simulate(position, ticks, strat) {
+  if (!Number(position.entry_mcap)) {
+    return { exitReason: 'NO_EXIT', pnlSol: 0, exitTickMs: ticks[ticks.length - 1]?.at_ms };
+  }
   const pos = { ...position };
   for (const f of POSITION_FIELDS) {
     if (strat[f] !== undefined && strat[f] !== null) pos[f] = strat[f];
@@ -128,6 +131,10 @@ function main() {
 
   if (args.sweep) {
     const [field, listRaw] = args.sweep.split('=');
+    if (!listRaw) {
+      console.error('--sweep requires format field=v1,v2 (e.g. sl=-15,-20,-25)');
+      return;
+    }
     const flagMap = { sl: 'sl_percent', tp: 'tp_percent', trail: 'trailing_percent', arm: 'trailing_arm_at_percent', rug: 'rug_guard_drop_pct' };
     const key = flagMap[field] || field;
     const baseline = summarize(rows.map(({ position }) => ({ position, sim: { pnlSol: Number(position.pnl_sol || 0), exitReason: position.exit_reason } })));
