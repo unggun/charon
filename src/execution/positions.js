@@ -8,10 +8,15 @@ import { liveWalletPubkey } from '../liveExecutor.js';
 import { fetchSavedWalletExposure } from '../enrichment/wallets.js';
 import { filterCandidate } from '../pipeline/candidateBuilder.js';
 import { openPositions } from '../db/positions.js';
+import { evaluateExit } from './exitLogic.js';
+import { insertPositionTick } from '../db/ticks.js';
 import { updateCandidateSnapshot } from '../db/candidates.js';
 import { trending } from '../signals/trending.js';
 import { executeLiveSell } from './router.js';
 import { sendPositionExit } from '../telegram/send.js';
+
+const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+const int = (v) => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : null);
 
 export async function freshEntryMarket(mint, candidate) {
   const gmgn = await fetchGmgnTokenInfo(mint, false);
@@ -115,39 +120,30 @@ export async function refreshPosition(position, { autoExit = true, jupiterPnl = 
     return null;
   }
   const strat = strategyById(position.strategy_id);
-  const highWaterMcap = Math.max(Number(position.high_water_mcap || 0), Number(mcap));
-  const highWaterPrice = Math.max(Number(position.high_water_price || 0), Number(price || 0));
-  // Legacy rows opened before low_water tracking start with NULL; seed from entry so drawdown
-  // is measured from the trade open rather than from the moment the column appeared.
-  const prevLowMcap = Number(position.low_water_mcap ?? position.entry_mcap ?? mcap);
-  const prevLowPrice = Number(position.low_water_price ?? position.entry_price ?? price ?? 0);
-  const lowWaterMcap = Math.min(prevLowMcap, Number(mcap));
-  const lowWaterPrice = price > 0 && prevLowPrice > 0 ? Math.min(prevLowPrice, Number(price)) : (Number(price) || prevLowPrice);
-  let pnlPercent = (Number(mcap) / Number(position.entry_mcap) - 1) * 100;
+  const jPnlPercent = (jupiterPnl && Number.isFinite(Number(jupiterPnl.totalPnlPercentageNative)))
+    ? Number(jupiterPnl.totalPnlPercentageNative)
+    : null;
+  const ev = evaluateExit(
+    position,
+    { mcap, price, at_ms: now(), pnlPercentOverride: jPnlPercent },
+    strat,
+  );
+  const highWaterMcap = ev.highWaterMcap;
+  const highWaterPrice = ev.highWaterPrice;
+  const lowWaterMcap = ev.lowWaterMcap;
+  const lowWaterPrice = ev.lowWaterPrice;
+  const trailingArmed = ev.trailingArmed;
+  let pnlPercent = ev.pnlPercent;
   let pnlSol = Number(position.size_sol) * pnlPercent / 100;
-  if (jupiterPnl && Number.isFinite(Number(jupiterPnl.totalPnlPercentageNative))) {
-    pnlPercent = Number(jupiterPnl.totalPnlPercentageNative);
-    pnlSol = Number.isFinite(Number(jupiterPnl.totalPnlNative)) ? Number(jupiterPnl.totalPnlNative) : pnlSol;
+  if (jupiterPnl && Number.isFinite(Number(jupiterPnl.totalPnlPercentageNative))
+      && Number.isFinite(Number(jupiterPnl.totalPnlNative))) {
+    pnlSol = Number(jupiterPnl.totalPnlNative);
   }
-  // Arm trailing on high-water reaching a threshold, not on TP-hit.
-  // Memecoins often peak below TP and dump; gating on TP strands those positions.
-  const peakPnlPercent = (highWaterMcap / Number(position.entry_mcap) - 1) * 100;
-  const trailingArmThreshold = Number(strat?.trailing_arm_at_percent ?? 25);
-  const tpHit = pnlPercent >= Number(position.tp_percent);
-  const slHit = pnlPercent <= Number(position.sl_percent);
-  const trailingArmed = Boolean(position.trailing_armed)
-    || (position.trailing_enabled && peakPnlPercent >= trailingArmThreshold);
-  const trailDrop = highWaterMcap > 0 ? (Number(mcap) / highWaterMcap - 1) * 100 : 0;
-  const trailingHit = trailingArmed && position.trailing_enabled && trailDrop <= -Math.abs(Number(position.trailing_percent));
-  let exitReason = null;
+  let exitReason = ev.exitReason;
   let closed = false;
 
-  if (strat?.max_hold_ms > 0 && (now() - position.opened_at_ms) >= strat.max_hold_ms) {
-    exitReason = 'MAX_HOLD';
-  }
-
-  // Partial TP check
-  if (!exitReason && strat?.partial_tp && !position.partial_tp_done && pnlPercent >= strat.partial_tp_at_percent) {
+  // Partial TP: mark done + (live) sell a fraction, without exiting.
+  if (ev.partialTpTriggered) {
     db.prepare('UPDATE dry_run_positions SET partial_tp_done = 1 WHERE id = ?').run(position.id);
     console.log(`[position] ${position.id} partial TP at ${pnlPercent.toFixed(1)}% (${strat.partial_tp_sell_percent}% sell)`);
     if (position.execution_mode === 'live' && position.token_amount_raw) {
@@ -171,20 +167,6 @@ export async function refreshPosition(position, { autoExit = true, jupiterPnl = 
     }
   }
 
-  // Rug guard: catastrophic drop from peak fires regardless of trailing-armed state.
-  // Takes label precedence over SL when both would fire.
-  const rugGuardThreshold = Number(strat?.rug_guard_drop_pct ?? 0);
-  if (!exitReason && rugGuardThreshold > 0 && highWaterMcap > 0 && trailDrop <= -rugGuardThreshold) {
-    exitReason = 'RUG_GUARD';
-  }
-
-  // Standard exit checks
-  if (!exitReason) {
-    if (slHit) exitReason = 'SL';
-    else if (tpHit && !position.trailing_enabled) exitReason = 'TP';
-    else if (trailingHit) exitReason = 'TRAILING_TP';
-  }
-
   // Live exits will override these with realized SOL values
   let finalPnlPercent = pnlPercent;
   let finalPnlSol = pnlSol;
@@ -196,6 +178,37 @@ export async function refreshPosition(position, { autoExit = true, jupiterPnl = 
         trailing_armed = ?
     WHERE id = ?
   `).run(highWaterMcap, highWaterPrice, lowWaterMcap, lowWaterPrice, trailingArmed ? 1 : 0, position.id);
+
+  try {
+    const s5 = asset?.stats5m || {};
+    const au = asset?.audit || {};
+    const tickMs = now();
+    insertPositionTick({
+      position_id: position.id,
+      mint: position.mint,
+      at_ms: tickMs,
+      ms_since_open: tickMs - Number(position.opened_at_ms),
+      price: num(price),
+      mcap: num(mcap),
+      pnl_percent: num(pnlPercent),
+      high_water_mcap: num(highWaterMcap),
+      low_water_mcap: num(lowWaterMcap),
+      trailing_armed: trailingArmed ? 1 : 0,
+      liquidity_usd: num(asset?.liquidity),
+      holder_count: int(asset?.holderCount),
+      holder_change_5m: num(s5.holderChange),
+      buys_5m: int(s5.numBuys),
+      sells_5m: int(s5.numSells),
+      buy_vol_5m: num(s5.buyVolume),
+      sell_vol_5m: num(s5.sellVolume),
+      price_change_5m: num(s5.priceChange),
+      top_holders_pct: num(au.topHoldersPercentage),
+      bot_holders_pct: num(au.botHoldersPercentage),
+      bundler_holding_pct: num(au.bundlerStats?.holdingPct),
+    });
+  } catch (err) {
+    console.log(`[position] ${position.id} tick insert failed: ${err.message}`);
+  }
 
   if (exitReason && autoExit && position.execution_mode === 'live') {
     if (sellInProgress.has(position.id)) return { ...position, exitReason: null };

@@ -193,7 +193,32 @@ export function initDb() {
       triggered_at_ms INTEGER,
       expires_at_ms INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS position_ticks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      position_id INTEGER NOT NULL,
+      mint TEXT NOT NULL,
+      at_ms INTEGER NOT NULL,
+      ms_since_open INTEGER NOT NULL,
+      price REAL,
+      mcap REAL,
+      pnl_percent REAL,
+      high_water_mcap REAL,
+      low_water_mcap REAL,
+      trailing_armed INTEGER,
+      liquidity_usd REAL,
+      holder_count INTEGER,
+      holder_change_5m REAL,
+      buys_5m INTEGER,
+      sells_5m INTEGER,
+      buy_vol_5m REAL,
+      sell_vol_5m REAL,
+      price_change_5m REAL,
+      top_holders_pct REAL,
+      bot_holders_pct REAL,
+      bundler_holding_pct REAL
+    );
     CREATE INDEX IF NOT EXISTS idx_alerts_status ON price_alerts(status, expires_at_ms);
+    CREATE INDEX IF NOT EXISTS idx_position_ticks_pos ON position_ticks(position_id, at_ms);
     CREATE INDEX IF NOT EXISTS idx_candidates_mint ON candidates(mint);
     CREATE INDEX IF NOT EXISTS idx_positions_status ON dry_run_positions(status);
     CREATE INDEX IF NOT EXISTS idx_trade_intents_status ON trade_intents(status);
