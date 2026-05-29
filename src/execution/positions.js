@@ -9,6 +9,7 @@ import { fetchSavedWalletExposure } from '../enrichment/wallets.js';
 import { filterCandidate } from '../pipeline/candidateBuilder.js';
 import { openPositions } from '../db/positions.js';
 import { evaluateExit } from './exitLogic.js';
+import { insertPositionTick } from '../db/ticks.js';
 import { updateCandidateSnapshot } from '../db/candidates.js';
 import { trending } from '../signals/trending.js';
 import { executeLiveSell } from './router.js';
@@ -174,6 +175,39 @@ export async function refreshPosition(position, { autoExit = true, jupiterPnl = 
         trailing_armed = ?
     WHERE id = ?
   `).run(highWaterMcap, highWaterPrice, lowWaterMcap, lowWaterPrice, trailingArmed ? 1 : 0, position.id);
+
+  const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+  const int = (v) => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : null);
+  try {
+    const s5 = asset?.stats5m || {};
+    const au = asset?.audit || {};
+    const tickMs = now();
+    insertPositionTick({
+      position_id: position.id,
+      mint: position.mint,
+      at_ms: tickMs,
+      ms_since_open: tickMs - Number(position.opened_at_ms),
+      price: num(price),
+      mcap: num(mcap),
+      pnl_percent: num(pnlPercent),
+      high_water_mcap: num(highWaterMcap),
+      low_water_mcap: num(lowWaterMcap),
+      trailing_armed: trailingArmed ? 1 : 0,
+      liquidity_usd: num(asset?.liquidity),
+      holder_count: int(asset?.holderCount),
+      holder_change_5m: num(s5.holderChange),
+      buys_5m: int(s5.numBuys),
+      sells_5m: int(s5.numSells),
+      buy_vol_5m: num(s5.buyVolume),
+      sell_vol_5m: num(s5.sellVolume),
+      price_change_5m: num(s5.priceChange),
+      top_holders_pct: num(au.topHoldersPercentage),
+      bot_holders_pct: num(au.botHoldersPercentage),
+      bundler_holding_pct: num(au.bundlerStats?.holdingPct),
+    });
+  } catch (err) {
+    console.log(`[position] ${position.id} tick insert failed: ${err.message}`);
+  }
 
   if (exitReason && autoExit && position.execution_mode === 'live') {
     if (sellInProgress.has(position.id)) return { ...position, exitReason: null };
