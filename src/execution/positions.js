@@ -131,7 +131,8 @@ export async function refreshPosition(position, { autoExit = true, jupiterPnl = 
   const trailingArmed = ev.trailingArmed;
   let pnlPercent = ev.pnlPercent;
   let pnlSol = Number(position.size_sol) * pnlPercent / 100;
-  if (jupiterPnl && Number.isFinite(Number(jupiterPnl.totalPnlNative))) {
+  if (jupiterPnl && Number.isFinite(Number(jupiterPnl.totalPnlPercentageNative))
+      && Number.isFinite(Number(jupiterPnl.totalPnlNative))) {
     pnlSol = Number(jupiterPnl.totalPnlNative);
   }
   let exitReason = ev.exitReason;
