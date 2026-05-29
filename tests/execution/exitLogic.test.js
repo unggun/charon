@@ -28,7 +28,7 @@ test('SL fires at sl_percent', () => {
 
 test('rug guard takes precedence and fires on deep drop from peak', () => {
   const pos = { ...base, high_water_mcap: 20000, trailing_armed: 1 };
-  // mcap 9000 = -55% from peak 20000, also below SL vs entry
+  // -55% from peak 20000 fires rug guard; entry PnL is only -10% so SL alone would not fire
   const r = evaluateExit(pos, { mcap: 9000, price: 0.0009, at_ms: 1 }, strat);
   assert.equal(r.exitReason, 'RUG_GUARD');
 });
@@ -64,4 +64,20 @@ test('pnlPercentOverride drives SL for live positions', () => {
   const r = evaluateExit(base,
     { mcap: 10000, price: 0.001, at_ms: 1, pnlPercentOverride: -30 }, strat);
   assert.equal(r.exitReason, 'SL');
+});
+
+test('TP does not fire while trailing enabled and at peak', () => {
+  // +250% vs entry, still at high water (trailDrop 0): trailing not given back, TP suppressed
+  const pos = { ...base, high_water_mcap: 35000, high_water_price: 0.0035 };
+  const r = evaluateExit(pos, { mcap: 35000, price: 0.0035, at_ms: 1 }, strat);
+  assert.equal(r.exitReason, null);
+  assert.equal(r.trailingArmed, true);
+});
+
+test('partial TP flag and rug-guard exit can coexist in one tick', () => {
+  // peak 24000 -> tick 11600 is -51.7% from peak, and +16% vs entry 10000
+  const pos = { ...base, high_water_mcap: 24000, high_water_price: 0.0024 };
+  const r = evaluateExit(pos, { mcap: 11600, price: 0.00116, at_ms: 1 }, strat);
+  assert.equal(r.partialTpTriggered, true); // +16% >= 15% partial threshold
+  assert.equal(r.exitReason, 'RUG_GUARD'); // -51.7% from peak 24000
 });
