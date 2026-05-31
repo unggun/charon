@@ -66,6 +66,15 @@ test('pnlPercentOverride drives SL for live positions', () => {
   assert.equal(r.exitReason, 'SL');
 });
 
+test('null pnlPercentOverride falls back to mcap-based PnL (dry-run)', () => {
+  // Dry-run passes pnlPercentOverride: null. Number(null) === 0 must NOT be
+  // mistaken for a finite override of 0 — PnL must reflect the -50% mcap drop.
+  const pos = { ...base, high_water_mcap: 20000, trailing_armed: 1 };
+  const r = evaluateExit(pos,
+    { mcap: 5000, price: 0.0005, at_ms: 1, pnlPercentOverride: null }, strat);
+  assert.equal(r.pnlPercent, -50); // (5000/10000 - 1) * 100
+});
+
 test('TP does not fire while trailing enabled and at peak', () => {
   // +250% vs entry, still at high water (trailDrop 0): trailing not given back, TP suppressed
   const pos = { ...base, high_water_mcap: 35000, high_water_price: 0.0035 };

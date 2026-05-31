@@ -18,8 +18,12 @@ export function evaluateExit(position, tick, strat = {}) {
     : (price || prevLowPrice);
 
   const mcapPnlPercent = (mcap / entryMcap - 1) * 100;
-  const pnlPercent = Number.isFinite(Number(tick.pnlPercentOverride))
-    ? Number(tick.pnlPercentOverride)
+  // Only use the override when it is genuinely supplied (live Jupiter PnL).
+  // Guard against null/undefined: Number(null) === 0 is finite and would
+  // otherwise be mistaken for a real 0% override, masking the mcap-based PnL.
+  const pnlOverride = tick.pnlPercentOverride;
+  const pnlPercent = (pnlOverride != null && Number.isFinite(Number(pnlOverride)))
+    ? Number(pnlOverride)
     : mcapPnlPercent;
   const peakPnlPercent = (highWaterMcap / entryMcap - 1) * 100;
 
