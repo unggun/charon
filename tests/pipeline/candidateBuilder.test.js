@@ -221,3 +221,56 @@ test('jupiter bundler ATH gate stays off when threshold is 0', () => {
   const strat = baseStrat({ max_jup_bundler_ath_pct: 0 });
   assert.ok(!filterCandidate(candidate, strat).failures.some(f => f.startsWith('bundler ATH:')));
 });
+
+test('top-20 aggregate gate rejects candidate above threshold', () => {
+  const candidate = baseCandidate({ holders: { maxHolderPercent: 20, top20Percent: 68 } });
+  const strat = baseStrat({ max_top20_holder_percent: 40 });
+  const result = filterCandidate(candidate, strat);
+  assert.equal(result.passed, false);
+  assert.ok(result.failures.some(f => f.startsWith('top20 holders:')));
+});
+
+test('top-20 aggregate gate accepts candidate below threshold', () => {
+  const candidate = baseCandidate({ holders: { maxHolderPercent: 20, top20Percent: 30 } });
+  const strat = baseStrat({ max_top20_holder_percent: 40 });
+  assert.equal(filterCandidate(candidate, strat).passed, true);
+});
+
+test('top-20 aggregate gate is disabled at 100', () => {
+  const candidate = baseCandidate({ holders: { maxHolderPercent: 20, top20Percent: 99 } });
+  const strat = baseStrat({ max_top20_holder_percent: 100 });
+  assert.ok(!filterCandidate(candidate, strat).failures.some(f => f.startsWith('top20 holders:')));
+});
+
+test('top-20 aggregate gate is skipped when top20Percent is missing', () => {
+  const candidate = baseCandidate({ holders: { maxHolderPercent: 20 } });
+  const strat = baseStrat({ max_top20_holder_percent: 40 });
+  assert.ok(!filterCandidate(candidate, strat).failures.some(f => f.startsWith('top20 holders:')));
+});
+
+test('single-holder gate rejects when largest holder exceeds threshold', () => {
+  const candidate = baseCandidate({ holders: { maxHolderPercent: 50, top20Percent: 60 } });
+  const strat = baseStrat({ max_single_holder_percent: 40, max_top20_holder_percent: 100 });
+  const result = filterCandidate(candidate, strat);
+  assert.equal(result.passed, false);
+  assert.ok(result.failures.some(f => f.startsWith('max single holder:')));
+});
+
+test('single-holder gate accepts when largest holder below threshold', () => {
+  const candidate = baseCandidate({ holders: { maxHolderPercent: 30, top20Percent: 60 } });
+  const strat = baseStrat({ max_single_holder_percent: 40, max_top20_holder_percent: 100 });
+  assert.equal(filterCandidate(candidate, strat).passed, true);
+});
+
+test('single-holder gate is skipped when field is unset (legacy strategy rows)', () => {
+  // baseStrat does not define max_single_holder_percent → gate must not run
+  const candidate = baseCandidate({ holders: { maxHolderPercent: 90, top20Percent: 20 } });
+  const strat = baseStrat({ max_top20_holder_percent: 100 });
+  assert.ok(!filterCandidate(candidate, strat).failures.some(f => f.startsWith('max single holder:')));
+});
+
+test('single-holder gate is disabled at 100', () => {
+  const candidate = baseCandidate({ holders: { maxHolderPercent: 99, top20Percent: 20 } });
+  const strat = baseStrat({ max_single_holder_percent: 100, max_top20_holder_percent: 100 });
+  assert.ok(!filterCandidate(candidate, strat).failures.some(f => f.startsWith('max single holder:')));
+});

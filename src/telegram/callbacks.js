@@ -230,6 +230,7 @@ async function updateSettingFromButton(query, key, value) {
     'min_gmgn_total_fee_sol',
     'min_graduated_volume_usd',
     'max_top20_holder_percent',
+    'max_single_holder_percent',
     'min_saved_wallet_holders',
     'trending_enabled',
     'trending_source',

@@ -91,10 +91,18 @@ export function filterCandidate(candidate, strat = null) {
     failures.push(`holders: ${holderCount} < ${minHolders}`);
   }
 
-  // Top holder concentration
+  // Top-20 aggregate concentration (sum of the 20 largest holders' supply share)
   const maxTop20 = pickStageGate(strat, candidate, 'max_top20_holder_percent');
-  if (maxTop20 < 100 && Number.isFinite(maxHolder) && maxHolder > maxTop20) {
-    failures.push(`max top holder: ${maxHolder}% > ${maxTop20}%`);
+  const top20 = candidate.holders.top20Percent;
+  if (maxTop20 < 100 && Number.isFinite(top20) && top20 > maxTop20) {
+    failures.push(`top20 holders: ${top20}% > ${maxTop20}%`);
+  }
+
+  // Single largest-holder concentration (separate from the top-20 aggregate above).
+  // Skipped entirely when the gate is unset, so legacy strategy rows are unaffected.
+  const maxSingle = pickStageGate(strat, candidate, 'max_single_holder_percent');
+  if (Number.isFinite(maxSingle) && maxSingle < 100 && Number.isFinite(maxHolder) && maxHolder > maxSingle) {
+    failures.push(`max single holder: ${maxHolder}% > ${maxSingle}%`);
   }
 
   // Saved wallet holders
