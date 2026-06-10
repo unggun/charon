@@ -217,6 +217,20 @@ export function initDb() {
       bot_holders_pct REAL,
       bundler_holding_pct REAL
     );
+    CREATE TABLE IF NOT EXISTS shadow_outcomes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      candidate_id INTEGER NOT NULL,
+      mint TEXT NOT NULL,
+      candidate_status TEXT,
+      checkpoint_min INTEGER NOT NULL,
+      at_ms INTEGER NOT NULL,
+      price_usd REAL,
+      mcap_usd REAL,
+      liquidity_usd REAL,
+      holder_count INTEGER,
+      UNIQUE(candidate_id, checkpoint_min)
+    );
+    CREATE INDEX IF NOT EXISTS idx_shadow_outcomes_mint ON shadow_outcomes(mint);
     CREATE INDEX IF NOT EXISTS idx_alerts_status ON price_alerts(status, expires_at_ms);
     CREATE INDEX IF NOT EXISTS idx_position_ticks_pos ON position_ticks(position_id, at_ms);
     CREATE INDEX IF NOT EXISTS idx_candidates_mint ON candidates(mint);

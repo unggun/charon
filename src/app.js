@@ -60,4 +60,8 @@ export async function startCharon() {
   // Position monitoring runs in both modes
   const trackPositions = makeFailureTracker('position monitor', (msg) => sendTelegram(msg));
   setInterval(() => trackPositions(() => monitorPositions()), POSITION_CHECK_MS);
+
+  // Shadow outcome sampling (filtered candidates' mcap at 30/60/120 min)
+  const { trackShadowOutcomes } = await import('./learning/shadowTracker.js');
+  setInterval(() => trackShadowOutcomes().catch(error => console.log(`[shadow] ${error.message}`)), 60_000);
 }

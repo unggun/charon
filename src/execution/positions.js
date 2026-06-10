@@ -164,6 +164,15 @@ export async function refreshPosition(position, { autoExit = true, jupiterPnl = 
       } catch (err) {
         console.log(`[position] ${position.id} partial sell failed: ${err.message}`);
       }
+    } else if (position.execution_mode !== 'live') {
+      // Dry-run: no sell executes and position PnL stays full-size, but record
+      // the trigger so blended (partial-aware) PnL can be computed offline.
+      db.prepare(`
+        INSERT INTO dry_run_trades (position_id, mint, side, at_ms, price, mcap, size_sol, token_amount_est, reason, payload_json)
+        VALUES (?, ?, 'sell', ?, ?, ?, ?, ?, 'PARTIAL_TP', ?)
+      `).run(position.id, position.mint, now(), price, mcap,
+        position.size_sol * (strat.partial_tp_sell_percent / 100), null,
+        json({ pnlPercent, simulated: true, partialSellPercent: strat.partial_tp_sell_percent }));
     }
   }
 
