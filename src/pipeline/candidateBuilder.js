@@ -21,6 +21,32 @@ export function buildFeeSnapshot(fee, signature) {
   };
 }
 
+function numOrNull(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+// Surfaces momentum/distribution fields that the signal-server trending payload
+// leaves null or zero. The data is present on the Jupiter asset for every
+// candidate (we fetch it anyway), so we read it through here:
+//   - priceChange5m: real 5-minute price change (the strongest entry predictor)
+//   - hotLevel / smartDegenCount: previously dead (trending payload omits them)
+//   - botHolderPercent / top10HolderPercent / bundlerHoldingPctAth: distribution
+// trendingToken (when populated, e.g. jupiter_toptrending rows) takes precedence
+// for hot/smart-degen; otherwise we fall back to the jupiterAsset equivalents.
+export function deriveJupiterMetrics(jupiterAsset, trendingToken) {
+  const stats5m = jupiterAsset?.stats5m || {};
+  const audit = jupiterAsset?.audit || {};
+  return {
+    priceChange5m: numOrNull(stats5m.priceChange) ?? numOrNull(trendingToken?.change5m),
+    hotLevel: numOrNull(trendingToken?.hot_level) ?? numOrNull(jupiterAsset?.organicScore) ?? 0,
+    smartDegenCount: numOrNull(trendingToken?.smart_degen_count) ?? numOrNull(stats5m.numOrganicBuyers) ?? 0,
+    botHolderPercent: numOrNull(audit.botHoldersPercentage),
+    top10HolderPercent: numOrNull(audit.topHoldersPercentage),
+    bundlerHoldingPctAth: numOrNull(audit?.bundlerStats?.holdingPctATH),
+  };
+}
+
 export function signalLabel(signals = {}) {
   return [
     signals.hasFeeClaim ? 'fees' : null,
@@ -119,6 +145,21 @@ export function filterCandidate(candidate, strat = null) {
     }
   }
 
+  // 5-minute momentum gate — reject entries that are already pumping on a 5m
+  // basis. June analysis: candidates with priceChange5m > 0 carried essentially
+  // the entire month's loss; the edge sits in flat/moderate-dip entries.
+  // Off when unset/null (legacy rows). 0 is a valid threshold (reject any
+  // positive 5m move), so we gate on presence + finiteness, not on a sentinel.
+  // Value is coerced so a JSON-string threshold still enforces ([[string-config]]).
+  const rawMaxCh5m = pickStageGate(strat, candidate, 'max_change5m_pct');
+  const maxCh5m = Number(rawMaxCh5m);
+  if (rawMaxCh5m != null && rawMaxCh5m !== '' && Number.isFinite(maxCh5m)) {
+    const ch5m = candidate.metrics?.priceChange5m;
+    if (Number.isFinite(ch5m) && ch5m > maxCh5m) {
+      failures.push(`5m change: ${ch5m.toFixed(1)}% > ${maxCh5m}%`);
+    }
+  }
+
   // Trending filters
   if (candidate.trending) {
     if (strat.trending_min_volume_usd > 0 && trendingVolume < strat.trending_min_volume_usd) {
@@ -206,6 +247,7 @@ export async function buildCandidate({ mint, fee = null, signature = null, gradu
     graduatedCoin ? 'graduated' : null,
     trendingToken ? 'trending' : null,
   ].filter(Boolean).join('_');
+  const jupiterMetrics = deriveJupiterMetrics(jupiterAsset, trendingToken);
 
   const candidate = {
     token: {
@@ -228,8 +270,12 @@ export async function buildCandidate({ mint, fee = null, signature = null, gradu
       graduatedMarketCapUsd: Number(graduatedCoin?.marketCap ?? 0),
       trendingVolumeUsd: Number(trendingToken?.volume ?? 0),
       trendingSwaps: Number(trendingToken?.swaps ?? 0),
-      trendingHotLevel: Number(trendingToken?.hot_level ?? 0),
-      trendingSmartDegenCount: Number(trendingToken?.smart_degen_count ?? 0),
+      trendingHotLevel: jupiterMetrics.hotLevel,
+      trendingSmartDegenCount: jupiterMetrics.smartDegenCount,
+      priceChange5m: jupiterMetrics.priceChange5m,
+      botHolderPercent: jupiterMetrics.botHolderPercent,
+      top10HolderPercent: jupiterMetrics.top10HolderPercent,
+      bundlerHoldingPctAth: jupiterMetrics.bundlerHoldingPctAth,
       tokenAgeMs: ageMs ?? null,
     },
     signals: {

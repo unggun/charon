@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { filterCandidate } from '../../src/pipeline/candidateBuilder.js';
+import { filterCandidate, deriveJupiterMetrics } from '../../src/pipeline/candidateBuilder.js';
 
 function baseCandidate(overrides = {}) {
   return {
@@ -42,6 +42,107 @@ function baseStrat(overrides = {}) {
     ...overrides,
   };
 }
+
+// --- deriveJupiterMetrics: surfaces momentum/distribution fields that the
+// signal-server trending payload leaves null/zero, sourced from jupiterAsset. ---
+
+test('deriveJupiterMetrics reads 5m price change from jupiterAsset.stats5m', () => {
+  const m = deriveJupiterMetrics({ stats5m: { priceChange: -4.92 } }, null);
+  assert.equal(m.priceChange5m, -4.92);
+});
+
+test('deriveJupiterMetrics falls back to trending.change5m when jupiter 5m missing', () => {
+  const m = deriveJupiterMetrics({ stats5m: {} }, { change5m: 2.1 });
+  assert.equal(m.priceChange5m, 2.1);
+});
+
+test('deriveJupiterMetrics preserves a real 0% 5m change (not treated as missing)', () => {
+  const m = deriveJupiterMetrics({ stats5m: { priceChange: 0 } }, { change5m: 99 });
+  assert.equal(m.priceChange5m, 0);
+});
+
+test('deriveJupiterMetrics returns null 5m change when neither source has it', () => {
+  const m = deriveJupiterMetrics({ stats5m: {} }, null);
+  assert.equal(m.priceChange5m, null);
+});
+
+test('deriveJupiterMetrics derives hotLevel from organicScore when trending lacks it', () => {
+  const m = deriveJupiterMetrics({ organicScore: 59.9 }, { hot_level: undefined });
+  assert.equal(m.hotLevel, 59.9);
+});
+
+test('deriveJupiterMetrics derives smartDegenCount from numOrganicBuyers', () => {
+  const m = deriveJupiterMetrics({ stats5m: { numOrganicBuyers: 42 } }, {});
+  assert.equal(m.smartDegenCount, 42);
+});
+
+test('deriveJupiterMetrics surfaces bot-holder and bundler distribution fields', () => {
+  const m = deriveJupiterMetrics({
+    audit: { botHoldersPercentage: 58.8, topHoldersPercentage: 20.5, bundlerStats: { holdingPctATH: 1.26 } },
+  }, null);
+  assert.equal(m.botHolderPercent, 58.8);
+  assert.equal(m.top10HolderPercent, 20.5);
+  assert.equal(m.bundlerHoldingPctAth, 1.26);
+});
+
+test('deriveJupiterMetrics is null/zero-safe when jupiterAsset is missing', () => {
+  const m = deriveJupiterMetrics(null, null);
+  assert.equal(m.priceChange5m, null);
+  assert.equal(m.hotLevel, 0);
+  assert.equal(m.smartDegenCount, 0);
+  assert.equal(m.botHolderPercent, null);
+  assert.equal(m.bundlerHoldingPctAth, null);
+});
+
+// --- max_change5m_pct: reject momentum-chasing entries (5m price already pumped). ---
+
+test('momentum gate rejects candidate whose 5m change exceeds threshold', () => {
+  const candidate = baseCandidate({ metrics: { ...baseCandidate().metrics, priceChange5m: 12 } });
+  const strat = baseStrat({ max_change5m_pct: 3 });
+  const result = filterCandidate(candidate, strat);
+  assert.equal(result.passed, false);
+  assert.ok(result.failures.some(f => f.startsWith('5m change:')));
+});
+
+test('momentum gate accepts candidate at or below threshold', () => {
+  const atEdge = baseCandidate({ metrics: { ...baseCandidate().metrics, priceChange5m: 3 } });
+  const dip = baseCandidate({ metrics: { ...baseCandidate().metrics, priceChange5m: -8 } });
+  const strat = baseStrat({ max_change5m_pct: 3 });
+  assert.equal(filterCandidate(atEdge, strat).passed, true);
+  assert.equal(filterCandidate(dip, strat).passed, true);
+});
+
+test('momentum gate is skipped when threshold is unset (legacy strategy rows)', () => {
+  const candidate = baseCandidate({ metrics: { ...baseCandidate().metrics, priceChange5m: 80 } });
+  const strat = baseStrat(); // no max_change5m_pct
+  assert.ok(!filterCandidate(candidate, strat).failures.some(f => f.startsWith('5m change:')));
+});
+
+test('momentum gate is off when threshold is null', () => {
+  const candidate = baseCandidate({ metrics: { ...baseCandidate().metrics, priceChange5m: 80 } });
+  const strat = baseStrat({ max_change5m_pct: null });
+  assert.ok(!filterCandidate(candidate, strat).failures.some(f => f.startsWith('5m change:')));
+});
+
+test('momentum gate is skipped when priceChange5m is missing', () => {
+  const candidate = baseCandidate({ metrics: { ...baseCandidate().metrics, priceChange5m: null } });
+  const strat = baseStrat({ max_change5m_pct: 3 });
+  assert.ok(!filterCandidate(candidate, strat).failures.some(f => f.startsWith('5m change:')));
+});
+
+test('momentum gate honors a string-typed threshold (string-disable lesson)', () => {
+  const candidate = baseCandidate({ metrics: { ...baseCandidate().metrics, priceChange5m: 12 } });
+  const strat = baseStrat({ max_change5m_pct: '3' });
+  assert.equal(filterCandidate(candidate, strat).passed, false);
+});
+
+test('momentum gate enforces a literal 0 threshold (reject any positive 5m)', () => {
+  const up = baseCandidate({ metrics: { ...baseCandidate().metrics, priceChange5m: 0.5 } });
+  const flat = baseCandidate({ metrics: { ...baseCandidate().metrics, priceChange5m: 0 } });
+  const strat = baseStrat({ max_change5m_pct: 0 });
+  assert.equal(filterCandidate(up, strat).passed, false);
+  assert.equal(filterCandidate(flat, strat).passed, true);
+});
 
 test('fee density gate rejects low-density candidate', () => {
   const candidate = baseCandidate({

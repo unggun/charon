@@ -337,6 +337,7 @@ export function initDb() {
     skip_bonding_band_max: 0,
     rug_guard_drop_pct: 50,
     max_jup_bundler_ath_pct: 0,
+    max_change5m_pct: null,
   }), ts);
 
   stratInsert.run('dip_buy', 'Dip Buy', 0, JSON.stringify({
@@ -385,6 +386,7 @@ export function initDb() {
     skip_bonding_band_max: 0,
     rug_guard_drop_pct: 50,
     max_jup_bundler_ath_pct: 0,
+    max_change5m_pct: null,
   }), ts);
 
   stratInsert.run('smart_money', 'Smart Money', 0, JSON.stringify({
@@ -433,6 +435,7 @@ export function initDb() {
     skip_bonding_band_max: 0,
     rug_guard_drop_pct: 50,
     max_jup_bundler_ath_pct: 0,
+    max_change5m_pct: null,
   }), ts);
 
   stratInsert.run('degen', 'Degen', 0, JSON.stringify({
@@ -481,6 +484,7 @@ export function initDb() {
     skip_bonding_band_max: 0,
     rug_guard_drop_pct: 50,
     max_jup_bundler_ath_pct: 0,
+    max_change5m_pct: null,
   }), ts);
 }
 
